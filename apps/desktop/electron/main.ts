@@ -4,6 +4,8 @@ import path from 'node:path'
 import { getDb, closeDb } from './db'
 import { registerSqliteHandlers } from './handlers/sqlite'
 import { registerSettingsHandlers } from './handlers/settings'
+import { registerGenresHandlers } from './handlers/genres'
+import { registerThumbnailsHandlers } from './handlers/thumbnails'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -64,5 +66,7 @@ app.whenReady().then(() => {
   getDb() // 初始化并运行迁移
   registerSqliteHandlers()
   registerSettingsHandlers()
+  registerGenresHandlers()
+  registerThumbnailsHandlers()
   createWindow()
 })

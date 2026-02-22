@@ -2,9 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import {
-  LayoutDashboard,
-  List,
-  BarChart2,
+  FolderOpen,
+  SwatchBook,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
@@ -17,9 +16,8 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { to: '/',          icon: LayoutDashboard, labelKey: 'menu.overview'  },
-  { to: '/list',      icon: List,            labelKey: 'menu.list'      },
-  { to: '/analytics', icon: BarChart2,       labelKey: 'menu.analytics' },
+  { to: '/', icon: FolderOpen, labelKey: 'menu.overview' },
+  { to: '/list', icon: SwatchBook, labelKey: 'menu.list' },
 ]
 
 interface LayoutProps {
@@ -58,14 +56,14 @@ export default function Layout({ children }: LayoutProps) {
             </div>
 
             {/* 菜单 */}
-            <ul className="menu bg-base-200 flex-1 px-2 w-full">
+            <ul className="menu bg-base-200 flex-1 px-2 w-full gap-2">
               {menuItems.map(({ to, icon: Icon, labelKey }) => {
                 const isActive = location.pathname === to
                 return (
                   <li key={to}>
                     <Link
                       to={to}
-                      className={isActive ? 'menu-active' : ''}
+                      className={`${isActive ? 'menu-active' : ''} py-2`}
                     >
                       <Icon size={16} />
                       {t(labelKey)}
