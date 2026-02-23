@@ -57,6 +57,10 @@ contextBridge.exposeInMainWorld('aiAPI', {
     ipcRenderer.invoke('ai:saveConfig', config),
   testConnection: (params: { providerId: string; modelId: string; apiKey: string; baseUrl?: string }): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('ai:testConnection', params),
+  embed: (text: string): Promise<number[] | null> =>
+    ipcRenderer.invoke('ai:embed', text),
+  embedBatch: (texts: string[]): Promise<number[][] | null> =>
+    ipcRenderer.invoke('ai:embedBatch', texts),
 })
 
 contextBridge.exposeInMainWorld('vectorsAPI', {

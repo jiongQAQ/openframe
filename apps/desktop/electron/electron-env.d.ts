@@ -32,6 +32,8 @@ interface Window {
     getConfig: () => Promise<unknown>
     saveConfig: (config: unknown) => Promise<void>
     testConnection: (params: { providerId: string; modelId: string; apiKey: string; baseUrl?: string }) => Promise<{ ok: boolean; error?: string }>
+    embed: (text: string) => Promise<number[] | null>
+    embedBatch: (texts: string[]) => Promise<number[][] | null>
   }
   settingsAPI: {
     getAll: () => Promise<Array<{ key: string; value: string }>>

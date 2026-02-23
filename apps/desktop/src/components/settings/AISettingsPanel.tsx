@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eye, EyeOff, X, Plus, Upload, Download, CheckCircle, XCircle, Loader } from 'lucide-react'
+import { Eye, EyeOff, X, Plus, Upload, Download, CheckCircle, XCircle, Loader, Cpu } from 'lucide-react'
 import {
   AI_PROVIDERS,
   providerColor,
@@ -51,6 +51,13 @@ const MODEL_TYPES: { type: ModelType; labelKey: string }[] = [
   { type: 'video', labelKey: 'settings.aiVideoModel' },
 ]
 
+const EMBEDDING_PROVIDERS = AI_PROVIDERS.filter((p) =>
+  p.models.some((m) => m.type === 'embedding'),
+)
+
+/** Sentinel value used in selectedProviderId to show the Embedding panel */
+const EMBEDDING_TAB = '__embedding__'
+
 // ── Main panel ─────────────────────────────────────────────────────────────────
 
 interface AISettingsPanelProps {
@@ -73,7 +80,7 @@ export function AISettingsPanel({ config, onChange }: AISettingsPanelProps) {
     })
   }
 
-  const selectedProvider = selectedProviderId
+  const selectedProvider = selectedProviderId && selectedProviderId !== EMBEDDING_TAB
     ? AI_PROVIDERS.find((p) => p.id === selectedProviderId) ?? null
     : null
 
@@ -99,6 +106,24 @@ export function AISettingsPanel({ config, onChange }: AISettingsPanelProps) {
 
         {/* Provider items */}
         <div className="flex-1 overflow-auto py-1">
+          {/* Embedding tab */}
+          <button
+            className={`w-full flex items-center gap-2.5 px-3 py-2 hover:bg-base-200 transition-colors text-left ${
+              selectedProviderId === EMBEDDING_TAB ? 'bg-base-200' : ''
+            }`}
+            onClick={() => setSelectedProviderId(EMBEDDING_TAB)}
+          >
+            <div
+              className="rounded-full flex items-center justify-center shrink-0"
+              style={{ width: 24, height: 24, background: '#7c3aed' }}
+            >
+              <Cpu size={12} className="text-white" />
+            </div>
+            <span className="flex-1 text-sm truncate">{t('settings.aiEmbedding')}</span>
+          </button>
+
+          <div className="mx-3 my-1 border-t border-base-300" />
+
           {AI_PROVIDERS.map((provider) => {
             const cfg = config.providers[provider.id] ?? { apiKey: '', baseUrl: '', enabled: false }
             const isSelected = selectedProviderId === provider.id
@@ -132,9 +157,11 @@ export function AISettingsPanel({ config, onChange }: AISettingsPanelProps) {
         </div>
       </div>
 
-      {/* ── Right: Provider Detail or Default Models ── */}
+      {/* ── Right: Provider Detail or Default Models or Embedding ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedProvider == null ? (
+        {selectedProviderId === EMBEDDING_TAB ? (
+          <EmbeddingPanel config={config} onChange={onChange} />
+        ) : selectedProvider == null ? (
           <DefaultModelsPanel config={config} onChange={onChange} />
         ) : (
           <ProviderDetail
@@ -204,11 +231,140 @@ function DefaultModelsPanel({ config, onChange }: { config: AIConfig; onChange: 
   )
 }
 
+// ── Embedding Panel ────────────────────────────────────────────────────────────
+
+function EmbeddingPanel({ config, onChange }: { config: AIConfig; onChange: (c: AIConfig) => void }) {
+  const { t } = useTranslation()
+
+  function updateModel(value: string) {
+    onChange({ ...config, models: { ...config.models, embedding: value } })
+  }
+
+  function updateProvider(
+    providerId: string,
+    patch: Partial<{ apiKey: string; baseUrl: string; enabled: boolean }>,
+  ) {
+    const prev = config.providers[providerId] ?? { apiKey: '', baseUrl: '', enabled: false }
+    onChange({
+      ...config,
+      providers: { ...config.providers, [providerId]: { ...prev, ...patch } },
+    })
+  }
+
+  // Derive dimension from the currently selected embedding model
+  const selectedDimension = (() => {
+    const key = config.models.embedding
+    if (!key) return null
+    const [providerId, modelId] = key.split(':')
+    const provider = EMBEDDING_PROVIDERS.find((p) => p.id === providerId)
+    return provider?.models.find((m) => m.id === modelId)?.dimension ?? null
+  })()
+
+  return (
+    <div className="flex-1 overflow-auto px-6 py-6 flex flex-col gap-6">
+      {/* Default model selector */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm font-semibold">{t('settings.aiEmbeddingModel')}</span>
+          {selectedDimension && (
+            <span className="text-xs text-base-content/50">
+              {t('settings.aiEmbeddingDimension', { dim: selectedDimension })}
+            </span>
+          )}
+        </div>
+        <select
+          className="select select-bordered w-full max-w-xs"
+          value={config.models.embedding}
+          onChange={(e) => updateModel(e.target.value)}
+        >
+          <option value="">{t('settings.aiNoModel')}</option>
+          {EMBEDDING_PROVIDERS.map((provider) => {
+            const providerCfg = config.providers[provider.id]
+            if (!providerCfg?.enabled) return null
+            const models = provider.models.filter((m) => m.type === 'embedding')
+            return (
+              <optgroup key={provider.id} label={provider.name}>
+                {models.map((m) => (
+                  <option key={m.id} value={`${provider.id}:${m.id}`}>
+                    {m.name}{m.dimension ? ` (${m.dimension}-dim)` : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )
+          })}
+        </select>
+        {!config.models.embedding && (
+          <p className="text-xs text-base-content/40">{t('settings.aiEmbeddingNone')}</p>
+        )}
+      </div>
+
+      {/* Embedding-capable provider configs */}
+      <div className="flex flex-col gap-4">
+        <span className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+          {t('settings.aiEmbeddingProviders')}
+        </span>
+        {EMBEDDING_PROVIDERS.map((provider) => {
+          const cfg = config.providers[provider.id] ?? { apiKey: '', baseUrl: '', enabled: false }
+          return (
+            <div key={provider.id} className="flex flex-col gap-2 p-4 rounded-xl border border-base-300">
+              {/* Header */}
+              <div className="flex items-center gap-2.5">
+                <ProviderAvatar id={provider.id} name={provider.name} size={24} />
+                <span className="text-sm font-medium flex-1">{provider.name}</span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary toggle-xs"
+                  checked={cfg.enabled}
+                  onChange={(e) => updateProvider(provider.id, { enabled: e.target.checked })}
+                />
+              </div>
+
+              {/* API Key — not shown for Ollama (local) */}
+              {provider.id !== 'ollama' && (
+                <input
+                  type="password"
+                  className="input input-bordered input-sm font-mono"
+                  placeholder="API Key"
+                  value={cfg.apiKey}
+                  onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
+                />
+              )}
+
+              {/* Base URL */}
+              <input
+                type="text"
+                className="input input-bordered input-sm"
+                placeholder={
+                  provider.id === 'ollama'
+                    ? 'http://localhost:11434/v1'
+                    : t('settings.aiBaseUrlPlaceholder')
+                }
+                value={cfg.baseUrl}
+                onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })}
+              />
+
+              {/* Available embedding models */}
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {provider.models.filter((m) => m.type === 'embedding').map((m) => (
+                  <span key={m.id} className="badge badge-ghost badge-sm font-mono">
+                    {m.name}{m.dimension ? ` · ${m.dimension}d` : ''}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Provider Detail Panel ──────────────────────────────────────────────────────
 
 function typeBadgeClass(type: ModelType): string {
-  if (type === 'text')  return 'badge-info'
-  if (type === 'image') return 'badge-warning'
+  if (type === 'text')      return 'badge-info'
+  if (type === 'image')     return 'badge-warning'
+  if (type === 'embedding') return 'badge-accent'
   return 'badge-secondary'
 }
 
@@ -424,6 +580,7 @@ function ProviderDetail({ provider, config, onChange }: ProviderDetailProps) {
                 <option value="text">Text</option>
                 <option value="image">Image</option>
                 <option value="video">Video</option>
+                <option value="embedding">Embedding</option>
               </select>
               <button className="btn btn-primary btn-xs btn-square" onClick={handleAddModel}>
                 <Plus size={12} />

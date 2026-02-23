@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
-import { generateText } from 'ai'
+import { generateText, embed, embedMany } from 'ai'
 import { store } from '../store'
-import { createProviderModel, isLanguageModel } from '@openframe/providers/factory'
+import { createProviderModel, isLanguageModel, getDefaultEmbeddingModel } from '@openframe/providers/factory'
 import { DEFAULT_AI_CONFIG, type AIConfig } from '@openframe/providers'
 
 export function registerAIHandlers() {
@@ -23,7 +23,7 @@ export function registerAIHandlers() {
         providers: {
           [providerId]: { apiKey, baseUrl: baseUrl ?? '', enabled: true },
         },
-        models: { text: '', image: '', video: '' },
+        models: { text: '', image: '', video: '', embedding: '' },
         customModels: {},
         disabledModels: {},
       }
@@ -41,6 +41,20 @@ export function registerAIHandlers() {
       }
     },
   )
+
+  ipcMain.handle('ai:embed', async (_event, text: string): Promise<number[] | null> => {
+    const model = getDefaultEmbeddingModel(store.get('ai_config'))
+    if (!model) return null
+    const { embedding } = await embed({ model, value: text })
+    return Array.from(embedding)
+  })
+
+  ipcMain.handle('ai:embedBatch', async (_event, texts: string[]): Promise<number[][] | null> => {
+    const model = getDefaultEmbeddingModel(store.get('ai_config'))
+    if (!model) return null
+    const { embeddings } = await embedMany({ model, values: texts })
+    return embeddings.map((e) => Array.from(e))
+  })
 }
 
 export { DEFAULT_AI_CONFIG }

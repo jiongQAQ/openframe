@@ -10,7 +10,7 @@ import { createTogetherAI } from '@ai-sdk/togetherai'
 import { createPerplexity } from '@ai-sdk/perplexity'
 import { createAlibaba } from '@ai-sdk/alibaba'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { LanguageModel, ImageModel } from 'ai'
+import type { LanguageModel, ImageModel, EmbeddingModel } from 'ai'
 import type { Experimental_VideoModelV3 } from '@ai-sdk/provider'
 import type { AIConfig, AIProviderConfig } from './config'
 import { AI_PROVIDERS, type ModelType } from './providers'
@@ -97,6 +97,7 @@ function buildModel(
 
     case 'openai': {
       const p = createOpenAI({ apiKey, baseURL })
+      if (type === 'embedding') return null  // use createEmbeddingModel instead
       return type === 'image' ? p.image(modelId) : p(modelId)
     }
 
@@ -161,6 +162,17 @@ function buildModel(
         apiKey,
       })
       return type === 'image' ? p.imageModel(modelId) : p(modelId)
+    }
+
+    case 'ollama': {
+      // Ollama is local-only; text models are supported via openai-compatible
+      const p = createOpenAICompatible({
+        name: 'ollama',
+        baseURL: baseURL ?? 'http://localhost:11434/v1',
+        apiKey: apiKey ?? 'ollama',
+      })
+      if (type === 'embedding') return null  // use createEmbeddingModel instead
+      return p(modelId)
     }
 
     default:
@@ -233,3 +245,44 @@ export const getDefaultImageModel = (config: AIConfig): ImageModel | CustomRestM
 /** Get the configured default video model (`VideoModel | CustomRestModel`). */
 export const getDefaultVideoModel = (config: AIConfig): VideoModel | CustomRestModel | null =>
   getDefaultModel('video', config) as VideoModel | CustomRestModel | null
+
+// ── Embedding ──────────────────────────────────────────────────────────────────
+
+/**
+ * Create an embedding model for the given provider.
+ * Supports: openai, ollama (openai-compatible).
+ */
+export function createEmbeddingModel(
+  providerId: string,
+  modelId: string,
+  config: AIConfig,
+): EmbeddingModel | null {
+  const cfg = config.providers[providerId]
+  if (!cfg) return null
+  const apiKey = cfg.apiKey || undefined
+  const baseURL = cfg.baseUrl || undefined
+
+  switch (providerId) {
+    case 'openai':
+      return createOpenAI({ apiKey, baseURL }).textEmbeddingModel(modelId)
+
+    case 'ollama':
+      return createOpenAICompatible({
+        name: 'ollama',
+        baseURL: baseURL ?? 'http://localhost:11434/v1',
+        apiKey: apiKey ?? 'ollama',
+      }).textEmbeddingModel(modelId)
+
+    default:
+      return null
+  }
+}
+
+/** Get the configured default embedding model from `config.models.embedding`. */
+export function getDefaultEmbeddingModel(config: AIConfig): EmbeddingModel | null {
+  const key = config.models.embedding
+  if (!key) return null
+  const idx = key.indexOf(':')
+  if (idx === -1) return null
+  return createEmbeddingModel(key.slice(0, idx), key.slice(idx + 1), config)
+}

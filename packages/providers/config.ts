@@ -14,6 +14,7 @@ export interface AIConfig {
     text: string   // "providerId:modelId" or ""
     image: string
     video: string
+    embedding: string
   }
   /** User-added custom models per provider */
   customModels: Record<string, ModelDef[]>
@@ -23,7 +24,7 @@ export interface AIConfig {
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
   providers: {},
-  models: { text: '', image: '', video: '' },
+  models: { text: '', image: '', video: '', embedding: '' },
   customModels: {},
   disabledModels: {},
 }

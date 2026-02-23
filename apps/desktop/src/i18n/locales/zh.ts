@@ -44,6 +44,11 @@ export default {
     aiEnableModel: '启用模型',
     aiDisableModel: '禁用模型',
     aiSelectProviderHint: '从左侧选择服务商以配置其 API 及模型。',
+    aiEmbedding: 'Embedding',
+    aiEmbeddingModel: '默认 Embedding 模型',
+    aiEmbeddingProviders: 'Embedding 服务商',
+    aiEmbeddingDimension: '{{dim}} 维',
+    aiEmbeddingNone: '未配置 Embedding 模型',
   },
   styleLibrary: {
     subtitle: '在这里维护可复用的风格条目。',

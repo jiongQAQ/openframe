@@ -6,10 +6,12 @@ import { app } from 'electron'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import * as schema from '@openframe/db'
-import * as sqliteVec from 'sqlite-vec'
+import { store } from './store'
+import { AI_PROVIDERS } from '@openframe/providers'
 
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3')
+const sqliteVec = require('sqlite-vec') as { load: (db: unknown) => void }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -32,10 +34,29 @@ export function getDb() {
     sqliteVec.load(_sqlite)
     _db = drizzle(_sqlite, { schema })
     migrate(_db, { migrationsFolder: MIGRATIONS_DIR })
+
+    // Determine embedding dimension from configured model
+    const cfg = store.get('ai_config')
+    const embeddingKey = cfg.models.embedding
+    let dimension = 1536  // sensible default (OpenAI text-embedding-3-small)
+    if (embeddingKey) {
+      const [providerId, modelId] = embeddingKey.split(':')
+      const provider = AI_PROVIDERS.find((p) => p.id === providerId)
+      const model = provider?.models.find((m) => m.id === modelId)
+      if (model?.dimension) dimension = model.dimension
+    }
+
+    // Recreate vec_chunks if dimension changed
+    const storedDim = store.get('vec_dimension') as number
+    if (storedDim !== dimension) {
+      _sqlite.exec('DROP TABLE IF EXISTS vec_chunks')
+      store.set('vec_dimension', dimension)
+    }
+
     _sqlite.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
         chunk_id INTEGER PRIMARY KEY,
-        embedding FLOAT[1536]
+        embedding FLOAT[${dimension}]
       )
     `)
   }

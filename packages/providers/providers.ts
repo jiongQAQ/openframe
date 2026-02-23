@@ -1,9 +1,11 @@
-export type ModelType = 'text' | 'image' | 'video'
+export type ModelType = 'text' | 'image' | 'video' | 'embedding'
 
 export interface ModelDef {
   id: string
   name: string
   type: ModelType
+  /** Output dimension — only set for embedding models */
+  dimension?: number
 }
 
 export interface ProviderDef {
@@ -28,6 +30,9 @@ export const AI_PROVIDERS: ProviderDef[] = [
       { id: 'o1',           name: 'o1',            type: 'text' },
       { id: 'dall-e-3',     name: 'DALL·E 3',      type: 'image' },
       { id: 'dall-e-2',     name: 'DALL·E 2',      type: 'image' },
+      { id: 'text-embedding-3-small', name: 'text-embedding-3-small', type: 'embedding', dimension: 1536 },
+      { id: 'text-embedding-3-large', name: 'text-embedding-3-large', type: 'embedding', dimension: 3072 },
+      { id: 'text-embedding-ada-002', name: 'text-embedding-ada-002', type: 'embedding', dimension: 1536 },
     ],
   },
   {
@@ -158,6 +163,17 @@ export const AI_PROVIDERS: ProviderDef[] = [
       { id: 'glm-4-air',      name: 'GLM-4 Air',      type: 'text' },
       { id: 'glm-4v',         name: 'GLM-4V',         type: 'text' },
       { id: 'cogview-3-plus', name: 'CogView-3 Plus', type: 'image' },
+    ],
+  },
+  {
+    id: 'ollama',
+    sdkPackage: '@ai-sdk/openai-compatible',
+    name: 'Ollama',
+    models: [
+      { id: 'nomic-embed-text',  name: 'nomic-embed-text',  type: 'embedding', dimension: 768  },
+      { id: 'mxbai-embed-large', name: 'mxbai-embed-large', type: 'embedding', dimension: 1024 },
+      { id: 'bge-m3',            name: 'bge-m3',            type: 'embedding', dimension: 1024 },
+      { id: 'all-minilm',        name: 'all-minilm',        type: 'embedding', dimension: 384  },
     ],
   },
 ]

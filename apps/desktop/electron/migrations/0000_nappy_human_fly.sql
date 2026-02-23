@@ -1,4 +1,4 @@
-CREATE TABLE `chunks` (
+CREATE TABLE IF NOT EXISTS `chunks` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`document_id` text NOT NULL,
 	`content` text NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE `chunks` (
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `documents` (
+CREATE TABLE IF NOT EXISTS `documents` (
 	`id` text PRIMARY KEY NOT NULL,
 	`title` text NOT NULL,
 	`type` text NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE `documents` (
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `genres` (
+CREATE TABLE IF NOT EXISTS `genres` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`code` text NOT NULL,

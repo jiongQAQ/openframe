@@ -18,7 +18,7 @@ const modelDefSchema = {
   properties: {
     id:   { type: 'string' },
     name: { type: 'string' },
-    type: { type: 'string', enum: ['text', 'image', 'video'] },
+    type: { type: 'string', enum: ['text', 'image', 'video', 'embedding'] },
   },
   required: ['id', 'name', 'type'],
 } as const
@@ -27,6 +27,7 @@ export interface AppSettings {
   language: string
   theme: string
   ai_config: AIConfig
+  vec_dimension: number
 }
 
 export const store = new Store<AppSettings>({
@@ -53,11 +54,12 @@ export const store = new Store<AppSettings>({
         models: {
           type: 'object',
           properties: {
-            text:  modelKeySchema,
-            image: modelKeySchema,
-            video: modelKeySchema,
+            text:      modelKeySchema,
+            image:     modelKeySchema,
+            video:     modelKeySchema,
+            embedding: modelKeySchema,
           },
-          default: { text: '', image: '', video: '' },
+          default: { text: '', image: '', video: '', embedding: '' },
         },
         customModels: {
           type: 'object',
@@ -76,10 +78,15 @@ export const store = new Store<AppSettings>({
       },
       default: DEFAULT_AI_CONFIG,
     },
+    vec_dimension: {
+      type: 'number',
+      default: 0,
+    },
   },
   defaults: {
     language: 'en',
     theme: 'system',
     ai_config: DEFAULT_AI_CONFIG,
+    vec_dimension: 0,
   },
 })

@@ -44,6 +44,11 @@ export default {
     aiEnableModel: 'Enable model',
     aiDisableModel: 'Disable model',
     aiSelectProviderHint: 'Select a provider on the left to configure its settings.',
+    aiEmbedding: 'Embedding',
+    aiEmbeddingModel: 'Default Embedding Model',
+    aiEmbeddingProviders: 'Embedding Providers',
+    aiEmbeddingDimension: '{{dim}}-dim',
+    aiEmbeddingNone: 'No embedding model configured',
   },
   styleLibrary: {
     subtitle: 'Manage reusable style entries here.',
