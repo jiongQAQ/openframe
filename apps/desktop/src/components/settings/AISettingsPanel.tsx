@@ -213,82 +213,47 @@ function DefaultModelsPanel({ config, onChange }: { config: AIConfig; onChange: 
 export function EmbeddingPanel({ config, onChange }: { config: AIConfig; onChange: (c: AIConfig) => void }) {
   const { t } = useTranslation()
 
+  const selectedKey = config.models.embedding
+
   function selectModel(key: string) {
     onChange({ ...config, models: { ...config.models, embedding: key } })
   }
 
-  function updateProvider(
-    providerId: string,
-    patch: Partial<{ apiKey: string; baseUrl: string; enabled: boolean }>,
-  ) {
-    const prev = config.providers[providerId] ?? { apiKey: '', baseUrl: '', enabled: false }
-    onChange({
-      ...config,
-      providers: { ...config.providers, [providerId]: { ...prev, ...patch } },
-    })
-  }
-
-  const selectedKey = config.models.embedding
+  // Only show providers that are enabled AND have embedding models
+  const availableProviders = EMBEDDING_PROVIDERS.filter(
+    (p) => config.providers[p.id]?.enabled,
+  )
 
   return (
-    <div className="h-full overflow-auto px-6 py-5 flex flex-col gap-5">
-      {!selectedKey && (
-        <p className="text-xs text-base-content/40">{t('settings.aiEmbeddingNone')}</p>
-      )}
+    <div className="h-full overflow-auto px-6 py-5 flex flex-col gap-3">
+      {availableProviders.length === 0 ? (
+        <div className="flex flex-col gap-1 py-4">
+          <p className="text-sm text-base-content/60">{t('settings.aiEmbeddingNone')}</p>
+          <p className="text-xs text-base-content/40">{t('settings.aiEmbeddingEnableHint')}</p>
+        </div>
+      ) : (
+        availableProviders.map((provider) => {
+          const embeddingModels = provider.models.filter((m) => m.type === 'embedding')
+          return (
+            <div key={provider.id} className="flex flex-col">
+              {/* Provider label */}
+              <div className="flex items-center gap-2 px-2 py-1.5 mb-0.5">
+                <ProviderAvatar id={provider.id} name={provider.name} size={18} />
+                <span className="text-xs font-semibold text-base-content/50 uppercase tracking-wide">
+                  {provider.name}
+                </span>
+              </div>
 
-      {EMBEDDING_PROVIDERS.map((provider) => {
-        const cfg = config.providers[provider.id] ?? { apiKey: '', baseUrl: '', enabled: false }
-        const embeddingModels = provider.models.filter((m) => m.type === 'embedding')
-
-        return (
-          <div key={provider.id} className="flex flex-col gap-2 p-4 rounded-xl border border-base-300">
-            {/* Header */}
-            <div className="flex items-center gap-2.5">
-              <ProviderAvatar id={provider.id} name={provider.name} size={24} />
-              <span className="text-sm font-medium flex-1">{provider.name}</span>
-              <input
-                type="checkbox"
-                className="toggle toggle-primary toggle-xs"
-                checked={cfg.enabled}
-                onChange={(e) => updateProvider(provider.id, { enabled: e.target.checked })}
-              />
-            </div>
-
-            {/* API Key — not shown for Ollama (local) */}
-            {provider.id !== 'ollama' && (
-              <input
-                type="password"
-                className="input input-bordered input-sm font-mono"
-                placeholder="API Key"
-                value={cfg.apiKey}
-                onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
-              />
-            )}
-
-            {/* Base URL */}
-            <input
-              type="text"
-              className="input input-bordered input-sm"
-              placeholder={
-                provider.id === 'ollama'
-                  ? 'http://localhost:11434/v1'
-                  : t('settings.aiBaseUrlPlaceholder')
-              }
-              value={cfg.baseUrl}
-              onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })}
-            />
-
-            {/* Clickable model list */}
-            <div className="flex flex-col mt-1">
+              {/* Clickable model rows */}
               {embeddingModels.map((m) => {
                 const key = `${provider.id}:${m.id}`
                 const isSelected = selectedKey === key
                 return (
                   <button
                     key={m.id}
-                    className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${
                       isSelected ? 'bg-primary/10' : 'hover:bg-base-200'
-                    } ${!cfg.enabled ? 'opacity-40 pointer-events-none' : ''}`}
+                    }`}
                     onClick={() => selectModel(key)}
                   >
                     <span
@@ -308,9 +273,9 @@ export function EmbeddingPanel({ config, onChange }: { config: AIConfig; onChang
                 )
               })}
             </div>
-          </div>
-        )
-      })}
+          )
+        })
+      )}
     </div>
   )
 }

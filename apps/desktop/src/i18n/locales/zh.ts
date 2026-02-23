@@ -50,7 +50,8 @@ export default {
     aiEmbeddingModel: '默认 Embedding 模型',
     aiEmbeddingProviders: 'Embedding 服务商',
     aiEmbeddingDimension: '{{dim}} 维',
-    aiEmbeddingNone: '未配置 Embedding 模型',
+    aiEmbeddingNone: '没有已启用的 Embedding 服务商',
+    aiEmbeddingEnableHint: '请先在「服务商」页面启用 OpenAI 或 Ollama。',
   },
   styleLibrary: {
     subtitle: '在这里维护可复用的风格条目。',

@@ -50,7 +50,8 @@ export default {
     aiEmbeddingModel: 'Default Embedding Model',
     aiEmbeddingProviders: 'Embedding Providers',
     aiEmbeddingDimension: '{{dim}}-dim',
-    aiEmbeddingNone: 'No embedding model configured',
+    aiEmbeddingNone: 'No embedding-capable providers enabled',
+    aiEmbeddingEnableHint: 'Enable OpenAI or Ollama in the Providers tab first.',
   },
   styleLibrary: {
     subtitle: 'Manage reusable style entries here.',
