@@ -50,6 +50,11 @@ contextBridge.exposeInMainWorld('thumbnailsAPI', {
     ipcRenderer.invoke('thumbnails:delete', filepath),
 })
 
+contextBridge.exposeInMainWorld('aiAPI', {
+  testConnection: (params: { providerId: string; modelId: string; apiKey: string; baseUrl?: string }): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('ai:testConnection', params),
+})
+
 contextBridge.exposeInMainWorld('genresAPI', {
   getAll: (): Promise<GenreRow[]> => ipcRenderer.invoke('genres:getAll'),
   insert: (genre: GenreRow): Promise<void> => ipcRenderer.invoke('genres:insert', genre),

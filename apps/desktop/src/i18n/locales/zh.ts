@@ -32,6 +32,8 @@ export default {
     aiNoModel: '— 不设置 —',
     aiBaseUrl: 'Base URL',
     aiTestConnection: '测试连接',
+    aiTestSuccess: '连接成功',
+    aiTestNoTextModel: '没有可用的文本模型',
     aiAvailableModels: '可用模型',
     aiAddModel: '添加模型',
     aiModelName: '模型名称',

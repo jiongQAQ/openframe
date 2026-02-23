@@ -6,6 +6,7 @@ import { registerSqliteHandlers } from './handlers/sqlite'
 import { registerSettingsHandlers } from './handlers/settings'
 import { registerGenresHandlers } from './handlers/genres'
 import { registerThumbnailsHandlers } from './handlers/thumbnails'
+import { registerAIHandlers } from './handlers/ai'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -68,5 +69,6 @@ app.whenReady().then(() => {
   registerSettingsHandlers()
   registerGenresHandlers()
   registerThumbnailsHandlers()
+  registerAIHandlers()
   createWindow()
 })

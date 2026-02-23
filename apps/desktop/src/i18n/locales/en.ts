@@ -32,6 +32,8 @@ export default {
     aiNoModel: '— None —',
     aiBaseUrl: 'Base URL',
     aiTestConnection: 'Test Connection',
+    aiTestSuccess: 'Connection successful',
+    aiTestNoTextModel: 'No text model available to test',
     aiAvailableModels: 'Available Models',
     aiAddModel: 'Add Model',
     aiModelName: 'Model Name',

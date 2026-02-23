@@ -27,6 +27,9 @@ type CategoryRow = { id: string; name: string; code: string; created_at: number 
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
+  aiAPI: {
+    testConnection: (params: { providerId: string; modelId: string; apiKey: string; baseUrl?: string }) => Promise<{ ok: boolean; error?: string }>
+  }
   settingsAPI: {
     getAll: () => Promise<Array<{ key: string; value: string }>>
     upsert: (key: string, value: string) => Promise<void>

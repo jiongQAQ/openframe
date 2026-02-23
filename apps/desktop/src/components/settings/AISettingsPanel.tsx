@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eye, EyeOff, X, Plus, Upload, Download } from 'lucide-react'
+import { Eye, EyeOff, X, Plus, Upload, Download, CheckCircle, XCircle, Loader } from 'lucide-react'
 import {
   AI_PROVIDERS,
   providerColor,
@@ -218,6 +218,8 @@ interface ProviderDetailProps {
   onChange: (c: AIConfig) => void
 }
 
+type TestState = 'idle' | 'testing' | 'ok' | 'error'
+
 function ProviderDetail({ provider, config, onChange }: ProviderDetailProps) {
   const { t } = useTranslation()
   const [showKey, setShowKey] = useState(false)
@@ -225,6 +227,8 @@ function ProviderDetail({ provider, config, onChange }: ProviderDetailProps) {
   const [newModel, setNewModel] = useState<{ id: string; name: string; type: ModelType }>({
     id: '', name: '', type: 'text',
   })
+  const [testState, setTestState] = useState<TestState>('idle')
+  const [testError, setTestError] = useState<string>('')
 
   const cfg = config.providers[provider.id] ?? { apiKey: '', baseUrl: '', enabled: false }
   const builtinModels = provider.models
@@ -266,6 +270,29 @@ function ProviderDetail({ provider, config, onChange }: ProviderDetailProps) {
     setAddingModel(false)
   }
 
+  async function handleTestConnection() {
+    const textModel = provider.models.find((m) => m.type === 'text')
+    if (!textModel) {
+      setTestState('error')
+      setTestError(t('settings.aiTestNoTextModel'))
+      return
+    }
+    setTestState('testing')
+    setTestError('')
+    const result = await window.aiAPI.testConnection({
+      providerId: provider.id,
+      modelId: textModel.id,
+      apiKey: cfg.apiKey,
+      baseUrl: cfg.baseUrl || undefined,
+    })
+    if (result.ok) {
+      setTestState('ok')
+    } else {
+      setTestState('error')
+      setTestError(result.error ?? '')
+    }
+  }
+
   function removeCustomModel(modelId: string) {
     const prev = config.customModels[provider.id] ?? []
     onChange({
@@ -303,7 +330,7 @@ function ProviderDetail({ provider, config, onChange }: ProviderDetailProps) {
               className="input input-bordered flex-1 font-mono"
               placeholder="sk-..."
               value={cfg.apiKey}
-              onChange={(e) => updateCfg({ apiKey: e.target.value })}
+              onChange={(e) => { updateCfg({ apiKey: e.target.value }); setTestState('idle') }}
             />
             <button
               className="btn btn-ghost btn-square shrink-0"
@@ -325,12 +352,32 @@ function ProviderDetail({ provider, config, onChange }: ProviderDetailProps) {
               className="input input-bordered flex-1"
               placeholder={t('settings.aiBaseUrlPlaceholder')}
               value={cfg.baseUrl}
-              onChange={(e) => updateCfg({ baseUrl: e.target.value })}
+              onChange={(e) => {
+                updateCfg({ baseUrl: e.target.value })
+                setTestState('idle')
+              }}
             />
-            <button className="btn btn-outline shrink-0">
+            <button
+              className="btn btn-outline shrink-0"
+              disabled={testState === 'testing' || !cfg.apiKey}
+              onClick={handleTestConnection}
+            >
+              {testState === 'testing' ? (
+                <Loader size={14} className="animate-spin" />
+              ) : testState === 'ok' ? (
+                <CheckCircle size={14} className="text-success" />
+              ) : testState === 'error' ? (
+                <XCircle size={14} className="text-error" />
+              ) : null}
               {t('settings.aiTestConnection')}
             </button>
           </div>
+          {testState === 'error' && testError && (
+            <p className="text-xs text-error mt-1">{testError}</p>
+          )}
+          {testState === 'ok' && (
+            <p className="text-xs text-success mt-1">{t('settings.aiTestSuccess')}</p>
+          )}
         </div>
 
         {/* Available Models */}

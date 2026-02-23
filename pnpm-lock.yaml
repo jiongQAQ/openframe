@@ -25,6 +25,9 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.162.2
         version: 1.162.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      ai:
+        specifier: ^6.0.97
+        version: 6.0.97(zod@3.25.76)
       better-sqlite3:
         specifier: ^12.6.2
         version: 12.6.2
