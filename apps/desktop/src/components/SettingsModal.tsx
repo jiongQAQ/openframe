@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { X, Settings, Bot } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { settingsCollection } from '../db/settingsCollection'
-import { type AIConfig, DEFAULT_AI_CONFIG, parseAIConfig } from '@openframe/providers'
+import { type AIConfig, DEFAULT_AI_CONFIG } from '@openframe/providers'
 import { GeneralSettingsPanel, type Theme } from './settings/GeneralSettingsPanel'
 import { AISettingsPanel } from './settings/AISettingsPanel'
 
@@ -48,7 +48,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     if (!open) return
     setPendingLang(settingsMap.language ?? (i18n.language.startsWith('zh') ? 'zh' : 'en'))
     setPendingTheme((settingsMap.theme as Theme) ?? 'system')
-    setPendingAI(parseAIConfig(settingsMap.ai_config))
+    window.aiAPI.getConfig().then((cfg) => setPendingAI((cfg as AIConfig) ?? DEFAULT_AI_CONFIG))
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function upsertSetting(key: string, value: string) {
@@ -63,7 +63,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     i18n.changeLanguage(pendingLang)
     upsertSetting('theme', pendingTheme)
     upsertSetting('language', pendingLang)
-    upsertSetting('ai_config', JSON.stringify(pendingAI))
+    window.aiAPI.saveConfig(pendingAI)
     applyTheme(pendingTheme)
     onClose()
   }
@@ -71,7 +71,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   function handleCancel() {
     setPendingLang(settingsMap.language ?? (i18n.language.startsWith('zh') ? 'zh' : 'en'))
     setPendingTheme((settingsMap.theme as Theme) ?? 'system')
-    setPendingAI(parseAIConfig(settingsMap.ai_config))
+    window.aiAPI.getConfig().then((cfg) => setPendingAI((cfg as AIConfig) ?? DEFAULT_AI_CONFIG))
     onClose()
   }
 

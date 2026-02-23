@@ -4,7 +4,6 @@ import Store from 'electron-store'
 interface SettingsSchema {
   language: string
   theme: string
-  ai_config: string
 }
 
 const store = new Store<SettingsSchema>({
@@ -19,10 +18,6 @@ const store = new Store<SettingsSchema>({
       type: 'string',
       enum: ['light', 'dark', 'system'],
       default: 'system',
-    },
-    ai_config: {
-      type: 'string',
-      default: '',
     },
   },
 })
