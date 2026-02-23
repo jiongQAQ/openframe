@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from 'electron'
@@ -13,7 +12,7 @@ const Database = require('better-sqlite3')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const DB_DIR = path.join(os.homedir(), '.openframe')
+const DB_DIR = app.getPath('userData')
 const DB_PATH = path.join(DB_DIR, 'app.db')
 
 // 打包后 migrations 放在 extraResources/migrations；开发时从源目录读取
