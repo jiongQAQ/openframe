@@ -7,6 +7,7 @@ import { registerSettingsHandlers } from './handlers/settings'
 import { registerGenresHandlers } from './handlers/genres'
 import { registerThumbnailsHandlers } from './handlers/thumbnails'
 import { registerAIHandlers } from './handlers/ai'
+import { registerVectorsHandlers } from './handlers/vectors'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -70,5 +71,6 @@ app.whenReady().then(() => {
   registerGenresHandlers()
   registerThumbnailsHandlers()
   registerAIHandlers()
+  registerVectorsHandlers()
   createWindow()
 })

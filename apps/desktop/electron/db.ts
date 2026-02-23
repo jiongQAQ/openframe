@@ -6,6 +6,7 @@ import { app } from 'electron'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import * as schema from '@openframe/db'
+import * as sqliteVec from 'sqlite-vec'
 
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3')
@@ -28,8 +29,15 @@ export function getDb() {
     fs.mkdirSync(DB_DIR, { recursive: true })
     _sqlite = new Database(DB_PATH)
     _sqlite.pragma('journal_mode = WAL')
+    sqliteVec.load(_sqlite)
     _db = drizzle(_sqlite, { schema })
     migrate(_db, { migrationsFolder: MIGRATIONS_DIR })
+    _sqlite.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+        chunk_id INTEGER PRIMARY KEY,
+        embedding FLOAT[1536]
+      )
+    `)
   }
   return _db
 }

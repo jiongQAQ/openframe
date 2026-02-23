@@ -59,6 +59,17 @@ contextBridge.exposeInMainWorld('aiAPI', {
     ipcRenderer.invoke('ai:testConnection', params),
 })
 
+contextBridge.exposeInMainWorld('vectorsAPI', {
+  insertDocument: (doc: { id: string; title: string; type: string; project_id?: string }): Promise<void> =>
+    ipcRenderer.invoke('vectors:insertDocument', doc),
+  insertChunk: (chunk: { document_id: string; content: string; chunk_index: number; embedding: number[] }): Promise<number> =>
+    ipcRenderer.invoke('vectors:insertChunk', chunk),
+  search: (params: { embedding: number[]; limit?: number; document_id?: string }): Promise<{ chunk_id: number; document_id: string; content: string; chunk_index: number; distance: number }[]> =>
+    ipcRenderer.invoke('vectors:search', params),
+  deleteDocument: (document_id: string): Promise<void> =>
+    ipcRenderer.invoke('vectors:deleteDocument', document_id),
+})
+
 contextBridge.exposeInMainWorld('genresAPI', {
   getAll: (): Promise<GenreRow[]> => ipcRenderer.invoke('genres:getAll'),
   insert: (genre: GenreRow): Promise<void> => ipcRenderer.invoke('genres:insert', genre),
