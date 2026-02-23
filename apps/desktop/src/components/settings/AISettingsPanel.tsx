@@ -213,8 +213,8 @@ function DefaultModelsPanel({ config, onChange }: { config: AIConfig; onChange: 
 export function EmbeddingPanel({ config, onChange }: { config: AIConfig; onChange: (c: AIConfig) => void }) {
   const { t } = useTranslation()
 
-  function updateModel(value: string) {
-    onChange({ ...config, models: { ...config.models, embedding: value } })
+  function selectModel(key: string) {
+    onChange({ ...config, models: { ...config.models, embedding: key } })
   }
 
   function updateProvider(
@@ -228,110 +228,89 @@ export function EmbeddingPanel({ config, onChange }: { config: AIConfig; onChang
     })
   }
 
-  // Derive dimension from the currently selected embedding model
-  const selectedDimension = (() => {
-    const key = config.models.embedding
-    if (!key) return null
-    const [providerId, modelId] = key.split(':')
-    const provider = EMBEDDING_PROVIDERS.find((p) => p.id === providerId)
-    return provider?.models.find((m) => m.id === modelId)?.dimension ?? null
-  })()
+  const selectedKey = config.models.embedding
 
   return (
-    <div className="flex-1 overflow-auto px-6 py-6 flex flex-col gap-6">
-      {/* Default model selector */}
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-semibold">{t('settings.aiEmbeddingModel')}</span>
-          {selectedDimension && (
-            <span className="text-xs text-base-content/50">
-              {t('settings.aiEmbeddingDimension', { dim: selectedDimension })}
-            </span>
-          )}
-        </div>
-        <select
-          className="select select-bordered w-full max-w-xs"
-          value={config.models.embedding}
-          onChange={(e) => updateModel(e.target.value)}
-        >
-          <option value="">{t('settings.aiNoModel')}</option>
-          {EMBEDDING_PROVIDERS.map((provider) => {
-            const providerCfg = config.providers[provider.id]
-            if (!providerCfg?.enabled) return null
-            const models = provider.models.filter((m) => m.type === 'embedding')
-            return (
-              <optgroup key={provider.id} label={provider.name}>
-                {models.map((m) => (
-                  <option key={m.id} value={`${provider.id}:${m.id}`}>
-                    {m.name}{m.dimension ? ` (${m.dimension}-dim)` : ''}
-                  </option>
-                ))}
-              </optgroup>
-            )
-          })}
-        </select>
-        {!config.models.embedding && (
-          <p className="text-xs text-base-content/40">{t('settings.aiEmbeddingNone')}</p>
-        )}
-      </div>
+    <div className="h-full overflow-auto px-6 py-5 flex flex-col gap-5">
+      {!selectedKey && (
+        <p className="text-xs text-base-content/40">{t('settings.aiEmbeddingNone')}</p>
+      )}
 
-      {/* Embedding-capable provider configs */}
-      <div className="flex flex-col gap-4">
-        <span className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
-          {t('settings.aiEmbeddingProviders')}
-        </span>
-        {EMBEDDING_PROVIDERS.map((provider) => {
-          const cfg = config.providers[provider.id] ?? { apiKey: '', baseUrl: '', enabled: false }
-          return (
-            <div key={provider.id} className="flex flex-col gap-2 p-4 rounded-xl border border-base-300">
-              {/* Header */}
-              <div className="flex items-center gap-2.5">
-                <ProviderAvatar id={provider.id} name={provider.name} size={24} />
-                <span className="text-sm font-medium flex-1">{provider.name}</span>
-                <input
-                  type="checkbox"
-                  className="toggle toggle-primary toggle-xs"
-                  checked={cfg.enabled}
-                  onChange={(e) => updateProvider(provider.id, { enabled: e.target.checked })}
-                />
-              </div>
+      {EMBEDDING_PROVIDERS.map((provider) => {
+        const cfg = config.providers[provider.id] ?? { apiKey: '', baseUrl: '', enabled: false }
+        const embeddingModels = provider.models.filter((m) => m.type === 'embedding')
 
-              {/* API Key — not shown for Ollama (local) */}
-              {provider.id !== 'ollama' && (
-                <input
-                  type="password"
-                  className="input input-bordered input-sm font-mono"
-                  placeholder="API Key"
-                  value={cfg.apiKey}
-                  onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
-                />
-              )}
-
-              {/* Base URL */}
+        return (
+          <div key={provider.id} className="flex flex-col gap-2 p-4 rounded-xl border border-base-300">
+            {/* Header */}
+            <div className="flex items-center gap-2.5">
+              <ProviderAvatar id={provider.id} name={provider.name} size={24} />
+              <span className="text-sm font-medium flex-1">{provider.name}</span>
               <input
-                type="text"
-                className="input input-bordered input-sm"
-                placeholder={
-                  provider.id === 'ollama'
-                    ? 'http://localhost:11434/v1'
-                    : t('settings.aiBaseUrlPlaceholder')
-                }
-                value={cfg.baseUrl}
-                onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })}
+                type="checkbox"
+                className="toggle toggle-primary toggle-xs"
+                checked={cfg.enabled}
+                onChange={(e) => updateProvider(provider.id, { enabled: e.target.checked })}
               />
-
-              {/* Available embedding models */}
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {provider.models.filter((m) => m.type === 'embedding').map((m) => (
-                  <span key={m.id} className="badge badge-ghost badge-sm font-mono">
-                    {m.name}{m.dimension ? ` · ${m.dimension}d` : ''}
-                  </span>
-                ))}
-              </div>
             </div>
-          )
-        })}
-      </div>
+
+            {/* API Key — not shown for Ollama (local) */}
+            {provider.id !== 'ollama' && (
+              <input
+                type="password"
+                className="input input-bordered input-sm font-mono"
+                placeholder="API Key"
+                value={cfg.apiKey}
+                onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
+              />
+            )}
+
+            {/* Base URL */}
+            <input
+              type="text"
+              className="input input-bordered input-sm"
+              placeholder={
+                provider.id === 'ollama'
+                  ? 'http://localhost:11434/v1'
+                  : t('settings.aiBaseUrlPlaceholder')
+              }
+              value={cfg.baseUrl}
+              onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })}
+            />
+
+            {/* Clickable model list */}
+            <div className="flex flex-col mt-1">
+              {embeddingModels.map((m) => {
+                const key = `${provider.id}:${m.id}`
+                const isSelected = selectedKey === key
+                return (
+                  <button
+                    key={m.id}
+                    className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${
+                      isSelected ? 'bg-primary/10' : 'hover:bg-base-200'
+                    } ${!cfg.enabled ? 'opacity-40 pointer-events-none' : ''}`}
+                    onClick={() => selectModel(key)}
+                  >
+                    <span
+                      className="shrink-0 w-2.5 h-2.5 rounded-full border-2 transition-colors"
+                      style={{
+                        borderColor: isSelected ? 'var(--color-primary)' : '#9ca3af',
+                        background: isSelected ? 'var(--color-primary)' : 'transparent',
+                      }}
+                    />
+                    <span className="flex-1 text-sm font-mono">{m.name}</span>
+                    {m.dimension && (
+                      <span className="text-xs text-base-content/40 shrink-0">
+                        {t('settings.aiEmbeddingDimension', { dim: m.dimension })}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

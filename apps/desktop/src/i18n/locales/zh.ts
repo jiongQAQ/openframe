@@ -15,6 +15,7 @@ export default {
   settings: {
     general: '通用',
     ai: 'AI',
+    provider: '服务商',
     language: '语言',
     appearance: '外观',
     themeLight: '浅色',

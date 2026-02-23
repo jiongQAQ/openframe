@@ -15,6 +15,7 @@ export default {
   settings: {
     general: 'General',
     ai: 'AI',
+    provider: 'Providers',
     language: 'Language',
     appearance: 'Appearance',
     themeLight: 'Light',

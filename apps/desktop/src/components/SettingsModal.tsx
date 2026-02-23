@@ -8,7 +8,7 @@ import { type AIConfig, DEFAULT_AI_CONFIG } from '@openframe/providers'
 import { GeneralSettingsPanel, type Theme } from './settings/GeneralSettingsPanel'
 import { AISettingsPanel, EmbeddingPanel } from './settings/AISettingsPanel'
 
-type Category = 'general' | 'ai' | 'embedding'
+type Category = 'general' | 'provider' | 'embedding'
 
 interface SettingsModalProps {
   open: boolean
@@ -17,7 +17,7 @@ interface SettingsModalProps {
 
 const categories: { id: Category; labelKey: string; icon: React.ReactNode }[] = [
   { id: 'general',   labelKey: 'settings.general',   icon: <Settings size={16} /> },
-  { id: 'ai',        labelKey: 'settings.ai',        icon: <Bot size={16} /> },
+  { id: 'provider',  labelKey: 'settings.provider',  icon: <Bot size={16} /> },
   { id: 'embedding', labelKey: 'settings.embedding', icon: <Cpu size={16} /> },
 ]
 
@@ -32,7 +32,7 @@ function applyTheme(theme: Theme) {
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { t, i18n } = useTranslation()
-  const [activeCategory, setActiveCategory] = useState<Category>('general')
+  const [activeCategory, setActiveCategory] = useState<Category>('provider')
 
   const [pendingLang,  setPendingLang]  = useState(i18n.language.startsWith('zh') ? 'zh' : 'en')
   const [pendingTheme, setPendingTheme] = useState<Theme>('system')
@@ -111,7 +111,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
 
             {/* Settings body */}
-            {activeCategory === 'ai' ? (
+            {activeCategory === 'provider' ? (
               <div className="flex-1 overflow-hidden">
                 <AISettingsPanel config={pendingAI} onChange={setPendingAI} />
               </div>
