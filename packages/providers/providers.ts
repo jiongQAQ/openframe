@@ -161,7 +161,7 @@ export const AI_PROVIDERS: ProviderDef[] = [
   {
     id: 'volcengine',
     sdkPackage: '@ai-sdk/openai-compatible',
-    name: '火山方舟',
+    name: 'Volcengine',
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     models: [
       { id: 'doubao-1.5-pro-32k',  name: 'Doubao 1.5 Pro 32K',  type: 'text' },
