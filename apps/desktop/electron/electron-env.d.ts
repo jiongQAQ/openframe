@@ -43,6 +43,18 @@ type SeriesRow = {
   duration: number
   created_at: number
 }
+type CharacterRow = {
+  id: string
+  project_id: string
+  name: string
+  gender: string
+  age: string
+  personality: string
+  thumbnail: string | null
+  appearance: string
+  background: string
+  created_at: number
+}
 type ChunkSearchResult = { chunk_id: number; document_id: string; content: string; chunk_index: number; distance: number }
 type DataInfo = { defaultDir: string; currentDir: string; pendingDir: string; dbSize: number; thumbsSize: number }
 
@@ -61,6 +73,15 @@ interface Window {
       draft: { name: string; code: string; description: string; prompt: string }
       modelKey?: string
     }) => Promise<{ ok: true; reply: string; draft: { name: string; code: string; description: string; prompt: string } } | { ok: false; error: string }>
+    extractCharactersFromScript: (params: {
+      script: string
+      modelKey?: string
+    }) => Promise<{ ok: true; characters: Array<{ name: string; gender: string; age: string; personality: string; appearance: string; background: string }> } | { ok: false; error: string }>
+    enhanceCharacterFromScript: (params: {
+      script: string
+      character: { name: string; gender?: string; age?: string; personality?: string; appearance?: string; background?: string }
+      modelKey?: string
+    }) => Promise<{ ok: true; character: { name: string; gender: string; age: string; personality: string; appearance: string; background: string } } | { ok: false; error: string }>
     scriptToolkit: (params: {
       action:
         | 'scene.expand'
@@ -116,6 +137,14 @@ interface Window {
     insert: (series: SeriesRow) => Promise<void>
     update: (series: SeriesRow) => Promise<void>
     delete: (id: string) => Promise<void>
+  }
+  charactersAPI: {
+    getAll: () => Promise<CharacterRow[]>
+    getByProject: (projectId: string) => Promise<CharacterRow[]>
+    insert: (character: CharacterRow) => Promise<void>
+    update: (character: CharacterRow) => Promise<void>
+    delete: (id: string) => Promise<void>
+    replaceByProject: (payload: { projectId: string; characters: CharacterRow[] }) => Promise<void>
   }
   windowAPI: {
     openStudio: (payload: { projectId: string; seriesId: string }) => Promise<void>

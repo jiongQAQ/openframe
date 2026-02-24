@@ -83,8 +83,11 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   if (isStudioWindow) {
     return (
       <StudioWorkspace
+        projectId={projectId}
         seriesId={selectedSeries?.id ?? ''}
         projectName={project.name}
+        projectCategory={project.category}
+        projectGenre={project.genre}
         seriesTitle={selectedSeries?.title ?? t('projectLibrary.seriesNo')}
         scriptContent={selectedSeries?.script ?? ''}
       />

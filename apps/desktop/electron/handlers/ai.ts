@@ -14,6 +14,14 @@ import { DEFAULT_AI_CONFIG, type AIConfig } from '@openframe/providers'
 
 type StyleAgentMessage = { role: 'user' | 'assistant'; content: string }
 type StyleDraft = { name: string; code: string; description: string; prompt: string }
+type CharacterExtractRow = {
+  name: string
+  gender: string
+  age: string
+  personality: string
+  appearance: string
+  background: string
+}
 type ScriptToolkitAction =
   | 'scene.expand'
   | 'scene.autocomplete'
@@ -43,6 +51,24 @@ function extractJsonObject(raw: string): Record<string, unknown> | null {
 
 function toText(v: unknown): string {
   return typeof v === 'string' ? v : ''
+}
+
+function parseCharacters(raw: string): CharacterExtractRow[] {
+  const obj = extractJsonObject(raw)
+  const list = Array.isArray(obj?.characters) ? obj.characters : []
+  return list
+    .map((item) => {
+      const row = item as Record<string, unknown>
+      return {
+        name: toText(row.name).trim(),
+        gender: toText(row.gender).trim(),
+        age: toText(row.age).trim(),
+        personality: toText(row.personality).trim(),
+        appearance: toText(row.appearance).trim(),
+        background: toText(row.background).trim(),
+      }
+    })
+    .filter((row) => row.name)
 }
 
 function stripCliStyleParams(prompt: string): string {
@@ -276,6 +302,107 @@ export function registerAIHandlers() {
       try {
         const { text } = await generateText({ model, prompt })
         return { ok: true, text: text.trim() }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: msg.split('\n')[0].slice(0, 200) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ai:extractCharactersFromScript',
+    async (
+      _event,
+      params: { script: string; modelKey?: string },
+    ): Promise<{ ok: true; characters: CharacterExtractRow[] } | { ok: false; error: string }> => {
+      const config = store.get('ai_config') as AIConfig
+      const selectedModel = params.modelKey
+        ? (() => {
+            const idx = params.modelKey!.indexOf(':')
+            if (idx === -1) return null
+            const providerId = params.modelKey!.slice(0, idx)
+            const modelId = params.modelKey!.slice(idx + 1)
+            return createProviderModelWithType(providerId, modelId, 'text', config)
+          })()
+        : null
+      const model = selectedModel && isLanguageModel(selectedModel) ? selectedModel : getDefaultTextModel(config)
+      if (!model || !isLanguageModel(model)) {
+        return { ok: false, error: 'No default text model configured.' }
+      }
+
+      const prompt = [
+        'You are a screenplay analyst.',
+        'Extract key characters from the script and summarize each one.',
+        'Return STRICT JSON only with shape:',
+        '{"characters":[{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}]}',
+        'Do not include markdown code fences.',
+        'Infer unknown fields conservatively; keep them short.',
+        `Script:\n${params.script}`,
+      ].join('\n\n')
+
+      try {
+        const { text } = await generateText({ model, prompt })
+        const characters = parseCharacters(text)
+        return { ok: true, characters }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: msg.split('\n')[0].slice(0, 200) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ai:enhanceCharacterFromScript',
+    async (
+      _event,
+      params: {
+        script: string
+        character: { name: string; gender?: string; age?: string; personality?: string; appearance?: string; background?: string }
+        modelKey?: string
+      },
+    ): Promise<{ ok: true; character: CharacterExtractRow } | { ok: false; error: string }> => {
+      const config = store.get('ai_config') as AIConfig
+      const selectedModel = params.modelKey
+        ? (() => {
+            const idx = params.modelKey!.indexOf(':')
+            if (idx === -1) return null
+            const providerId = params.modelKey!.slice(0, idx)
+            const modelId = params.modelKey!.slice(idx + 1)
+            return createProviderModelWithType(providerId, modelId, 'text', config)
+          })()
+        : null
+      const model = selectedModel && isLanguageModel(selectedModel) ? selectedModel : getDefaultTextModel(config)
+      if (!model || !isLanguageModel(model)) {
+        return { ok: false, error: 'No default text model configured.' }
+      }
+
+      const prompt = [
+        'You are a screenplay character designer.',
+        'Enhance one character card using the script context.',
+        'Return STRICT JSON only with shape:',
+        '{"character":{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}}',
+        'Keep the same character identity and name.',
+        'Do not include markdown code fences.',
+        `Current character:\n${JSON.stringify(params.character)}`,
+        `Script:\n${params.script}`,
+      ].join('\n\n')
+
+      try {
+        const { text } = await generateText({ model, prompt })
+        const parsed = extractJsonObject(text)
+        const raw = (parsed?.character ?? {}) as Record<string, unknown>
+        const character: CharacterExtractRow = {
+          name: toText(raw.name).trim() || params.character.name,
+          gender: toText(raw.gender).trim() || params.character.gender || '',
+          age: toText(raw.age).trim() || params.character.age || '',
+          personality: toText(raw.personality).trim() || params.character.personality || '',
+          appearance: toText(raw.appearance).trim() || params.character.appearance || '',
+          background: toText(raw.background).trim() || params.character.background || '',
+        }
+        if (!character.name) {
+          return { ok: false, error: 'Failed to parse character from model response.' }
+        }
+        return { ok: true, character }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return { ok: false, error: msg.split('\n')[0].slice(0, 200) }

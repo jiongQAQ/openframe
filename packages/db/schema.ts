@@ -23,6 +23,19 @@ export const series = sqliteTable('series', {
   created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
 
+export const characters = sqliteTable('characters', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').notNull(),
+  name: text('name').notNull().$default(() => ''),
+  gender: text('gender').notNull().$default(() => ''),
+  age: text('age').notNull().$default(() => ''),
+  personality: text('personality').notNull().$default(() => ''),
+  thumbnail: text('thumbnail'),
+  appearance: text('appearance').notNull().$default(() => ''),
+  background: text('background').notNull().$default(() => ''),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
+
 export const genres = sqliteTable('genres', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
