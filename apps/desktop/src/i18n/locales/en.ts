@@ -90,7 +90,7 @@ export default {
     aiAutocompleteHint: 'Tab accept, Esc dismiss',
     aiAutocompleteNeedCursor: 'Place the cursor where you want completion.',
     characterPanelTitle: 'Set Character Profiles',
-    characterPanelSubtitle: 'Design 1-5 key roles to improve downstream image and storyboard generation.',
+    characterPanelSubtitle: 'Refining character cards improves downstream image and storyboard generation.',
     characterFromDraft: 'Fill Missing from Script',
     characterRegenerate: 'Re-extract and Replace',
     characterRegenerateConfirm: 'This will replace current project characters. Continue?',

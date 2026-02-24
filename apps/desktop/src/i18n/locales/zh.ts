@@ -90,7 +90,7 @@ export default {
     aiAutocompleteHint: 'Tab 接受，Esc 取消',
     aiAutocompleteNeedCursor: '请先将光标放到需要补全的位置。',
     characterPanelTitle: '请为你的角色设置形象',
-    characterPanelSubtitle: '建议先创作 1-5 个角色，完善角色卡可提升后续生图和分镜效果。',
+    characterPanelSubtitle: '完善角色卡可提升后续生图和分镜效果。',
     characterFromDraft: '从剧本补充角色',
     characterRegenerate: '覆盖重提角色',
     characterRegenerateConfirm: '将覆盖当前项目角色，是否继续？',
