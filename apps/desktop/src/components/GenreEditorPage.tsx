@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from '@tanstack/react-db'
-import { ArrowLeft, Sparkles, SendHorizontal, Upload, X } from 'lucide-react'
+import { ArrowLeft, Sparkles, SendHorizontal } from 'lucide-react'
 import { AI_PROVIDERS, type AIConfig } from '@openframe/providers'
 import { genresCollection } from '../db/genres_collection'
+import { ThumbnailGeneratorField } from './ThumbnailGeneratorField'
 
 const EMPTY_GENRE = { name: '', code: '', description: '', prompt: '', thumbnail: '' }
 type AgentMessage = { role: 'user' | 'assistant'; content: string }
 type TextModelOption = { key: string; providerName: string; modelName: string }
-type ImageModelOption = { key: string; providerName: string; modelName: string }
 
 function extFromMediaType(mediaType: string | undefined): string {
   const mt = (mediaType ?? '').toLowerCase().split(';')[0].trim()
@@ -50,87 +50,6 @@ function getTextModelOptions(config: AIConfig): TextModelOption[] {
   return result
 }
 
-function getImageModelOptions(config: AIConfig): ImageModelOption[] {
-  const result: ImageModelOption[] = []
-  for (const provider of AI_PROVIDERS) {
-    const providerCfg = config.providers[provider.id]
-    if (!providerCfg?.enabled) continue
-    const builtin = provider.models.filter((m) => m.type === 'image')
-    const custom = (config.customModels[provider.id] ?? []).filter((m) => m.type === 'image')
-    for (const model of [...builtin, ...custom]) {
-      const key = `${provider.id}:${model.id}`
-      if (!config.enabledModels?.[key]) continue
-      if (config.hiddenModels?.[key]) continue
-      result.push({ key, providerName: provider.name, modelName: model.name || model.id })
-    }
-  }
-  return result
-}
-
-function getThumbnailSrc(value: string | null): string | null {
-  if (!value) return null
-  if (value.startsWith('data:') || value.startsWith('http://') || value.startsWith('https://')) return value
-  if (value.startsWith('openframe-thumb://')) return value
-  const normalized = value.startsWith('file://') ? value.slice(7) : value
-  return `openframe-thumb://local?path=${encodeURIComponent(normalized)}`
-}
-
-interface ThumbnailUploaderProps {
-  savedPath: string
-  pendingFile: File | null
-  onSelect: (file: File) => void
-  onClear: () => void
-  t: ReturnType<typeof useTranslation>['t']
-}
-
-function ThumbnailUploader({ savedPath, pendingFile, onSelect, onClear, t }: ThumbnailUploaderProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!pendingFile) {
-      setPreviewUrl(null)
-      return
-    }
-    const url = URL.createObjectURL(pendingFile)
-    setPreviewUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [pendingFile])
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-    onSelect(file)
-  }
-
-  const displaySrc = previewUrl ?? getThumbnailSrc(savedPath)
-
-  return (
-    <div
-      className="relative w-full h-40 rounded-lg border-2 border-dashed border-base-300 cursor-pointer overflow-hidden hover:border-primary transition-colors"
-      onClick={() => inputRef.current?.click()}
-    >
-      {displaySrc ? (
-        <>
-          <img src={displaySrc} alt="thumbnail" className="w-full h-full object-contain" />
-          <button
-            className="absolute top-2 right-2 btn btn-circle btn-xs btn-neutral opacity-80 hover:opacity-100"
-            onClick={(e) => { e.stopPropagation(); onClear() }}
-          >
-            <X size={12} />
-          </button>
-        </>
-      ) : (
-        <div className="flex flex-col items-center justify-center h-full gap-2 text-base-content/30 select-none">
-          <Upload size={22} />
-          <span className="text-xs">{t('styleLibrary.thumbnailPlaceholder')}</span>
-        </div>
-      )}
-      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleChange} />
-    </div>
-  )
-}
 
 export function GenreEditorPage({ genreId }: { genreId?: string }) {
   const isEdit = !!genreId
@@ -144,10 +63,6 @@ export function GenreEditorPage({ genreId }: { genreId?: string }) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [originalThumbnail, setOriginalThumbnail] = useState('')
-  const [thumbGenerating, setThumbGenerating] = useState(false)
-  const [thumbError, setThumbError] = useState('')
-  const [thumbModelOptions, setThumbModelOptions] = useState<ImageModelOption[]>([])
-  const [thumbModelKey, setThumbModelKey] = useState('')
 
   const [agentOpen, setAgentOpen] = useState(false)
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([])
@@ -167,27 +82,16 @@ export function GenreEditorPage({ genreId }: { genreId?: string }) {
         hiddenModels: {},
       }
       const options = getTextModelOptions(ai)
-      const imageOptions = getImageModelOptions(ai)
       setAgentModelOptions(options)
-      setThumbModelOptions(imageOptions)
       const defaultKey = ai.models.text
-      const defaultImageKey = ai.models.image
       if (defaultKey && options.some((o) => o.key === defaultKey)) {
         setAgentModelKey(defaultKey)
       } else {
         setAgentModelKey(options[0]?.key ?? '')
       }
-
-      if (defaultImageKey && imageOptions.some((o) => o.key === defaultImageKey)) {
-        setThumbModelKey(defaultImageKey)
-      } else {
-        setThumbModelKey(imageOptions[0]?.key ?? '')
-      }
     }).catch(() => {
       setAgentModelOptions([])
       setAgentModelKey('')
-      setThumbModelOptions([])
-      setThumbModelKey('')
     })
   }, [])
 
@@ -245,33 +149,6 @@ export function GenreEditorPage({ genreId }: { genreId?: string }) {
       setAgentError(t('styleLibrary.agentError'))
     } finally {
       setAgentLoading(false)
-    }
-  }
-
-  async function handleGenerateThumbnail() {
-    const prompt = form.prompt.trim()
-    if (!prompt) {
-      setThumbError(t('styleLibrary.thumbnailPromptRequired'))
-      return
-    }
-    setThumbGenerating(true)
-    setThumbError('')
-    try {
-      const result = await window.aiAPI.generateImage({ prompt, modelKey: thumbModelKey || undefined })
-      if (!result.ok) {
-        setThumbError(result.error)
-        return
-      }
-      const bytes = new Uint8Array(result.data)
-      const mediaType = result.mediaType || 'image/png'
-      const ext = extFromMediaType(mediaType)
-      const file = new File([bytes], `thumbnail.${ext}`, { type: mediaType })
-      setPendingFile(file)
-      setForm((prev) => ({ ...prev, thumbnail: '' }))
-    } catch {
-      setThumbError(t('styleLibrary.thumbnailGenerateError'))
-    } finally {
-      setThumbGenerating(false)
     }
   }
 
@@ -408,35 +285,23 @@ export function GenreEditorPage({ genreId }: { genreId?: string }) {
 
             <div className="form-control">
               <label className="label label-text text-xs pb-1">{t('styleLibrary.thumbnail')}</label>
-              <div className="mb-2">
-                <select
-                  className="select select-bordered select-sm w-full"
-                  value={thumbModelKey}
-                  onChange={(e) => setThumbModelKey(e.target.value)}
-                >
-                  {thumbModelOptions.length === 0 ? (
-                    <option value="">{t('styleLibrary.thumbnailNoModel')}</option>
-                  ) : (
-                    thumbModelOptions.map((opt) => (
-                      <option key={opt.key} value={opt.key}>{`${opt.providerName} / ${opt.modelName}`}</option>
-                    ))
-                  )}
-                </select>
-              </div>
-              <div className="flex justify-end mb-2">
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => void handleGenerateThumbnail()} disabled={thumbGenerating || !thumbModelKey}>{thumbGenerating && <span className="loading loading-spinner loading-xs" />}{t('styleLibrary.thumbnailGenerateByPrompt')}</button>
-              </div>
-              <ThumbnailUploader
+              <ThumbnailGeneratorField
                 savedPath={form.thumbnail}
                 pendingFile={pendingFile}
-                onSelect={setPendingFile}
-                onClear={() => {
-                  setPendingFile(null)
-                  setForm((prev) => ({ ...prev, thumbnail: '' }))
+                onPendingFileChange={setPendingFile}
+                onSavedPathChange={(path) => setForm((prev) => ({ ...prev, thumbnail: path }))}
+                buildPrompt={() => {
+                  const prompt = form.prompt.trim()
+                  if (!prompt) return { error: t('styleLibrary.thumbnailPromptRequired') }
+                  return { prompt }
                 }}
-                t={t}
+                texts={{
+                  placeholder: t('styleLibrary.thumbnailPlaceholder'),
+                  modelEmpty: t('styleLibrary.thumbnailNoModel'),
+                  generateButton: t('styleLibrary.thumbnailGenerateByPrompt'),
+                  generateError: t('styleLibrary.thumbnailGenerateError'),
+                }}
               />
-              {thumbError && <p className="text-error text-xs mt-2">{thumbError}</p>}
             </div>
 
             {error && <p className="text-error text-xs">{error}</p>}

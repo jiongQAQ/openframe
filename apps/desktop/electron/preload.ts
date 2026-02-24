@@ -41,6 +41,16 @@ contextBridge.exposeInMainWorld('settingsAPI', {
 // --------- Expose Genres API to the Renderer process ---------
 type GenreRow = { id: string; name: string; code: string; description: string; prompt: string; thumbnail: string | null; created_at: number }
 type CategoryRow = { id: string; name: string; code: string; created_at: number }
+type ProjectRow = {
+  id: string
+  name: string
+  video_ratio: '16:9' | '9:16'
+  thumbnail: string | null
+  category: string
+  genre: string
+  series_count: number
+  created_at: number
+}
 
 // --------- Expose Thumbnails API to the Renderer process ---------
 contextBridge.exposeInMainWorld('thumbnailsAPI', {
@@ -108,6 +118,13 @@ contextBridge.exposeInMainWorld('genresAPI', {
   insert: (genre: GenreRow): Promise<void> => ipcRenderer.invoke('genres:insert', genre),
   update: (genre: GenreRow): Promise<void> => ipcRenderer.invoke('genres:update', genre),
   delete: (id: string): Promise<void> => ipcRenderer.invoke('genres:delete', id),
+})
+
+contextBridge.exposeInMainWorld('projectsAPI', {
+  getAll: (): Promise<ProjectRow[]> => ipcRenderer.invoke('projects:getAll'),
+  insert: (project: ProjectRow): Promise<void> => ipcRenderer.invoke('projects:insert', project),
+  update: (project: ProjectRow): Promise<void> => ipcRenderer.invoke('projects:update', project),
+  delete: (id: string): Promise<void> => ipcRenderer.invoke('projects:delete', id),
 })
 
 contextBridge.exposeInMainWorld('categoriesAPI', {

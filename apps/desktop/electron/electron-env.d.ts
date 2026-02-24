@@ -23,6 +23,16 @@ declare namespace NodeJS {
 
 type GenreRow = { id: string; name: string; code: string; description: string; prompt: string; thumbnail: string | null; created_at: number }
 type CategoryRow = { id: string; name: string; code: string; created_at: number }
+type ProjectRow = {
+  id: string
+  name: string
+  video_ratio: '16:9' | '9:16'
+  thumbnail: string | null
+  category: string
+  genre: string
+  series_count: number
+  created_at: number
+}
 type ChunkSearchResult = { chunk_id: number; document_id: string; content: string; chunk_index: number; distance: number }
 type DataInfo = { defaultDir: string; currentDir: string; pendingDir: string; dbSize: number; thumbsSize: number }
 
@@ -55,6 +65,12 @@ interface Window {
     getAll: () => Promise<GenreRow[]>
     insert: (genre: GenreRow) => Promise<void>
     update: (genre: GenreRow) => Promise<void>
+    delete: (id: string) => Promise<void>
+  }
+  projectsAPI: {
+    getAll: () => Promise<ProjectRow[]>
+    insert: (project: ProjectRow) => Promise<void>
+    update: (project: ProjectRow) => Promise<void>
     delete: (id: string) => Promise<void>
   }
   categoriesAPI: {

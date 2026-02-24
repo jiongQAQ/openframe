@@ -6,6 +6,7 @@ import { getDb, closeDb } from './db'
 import { registerSqliteHandlers } from './handlers/sqlite'
 import { registerSettingsHandlers } from './handlers/settings'
 import { registerGenresHandlers } from './handlers/genres'
+import { registerProjectsHandlers } from './handlers/projects'
 import { registerThumbnailsHandlers } from './handlers/thumbnails'
 import { registerAIHandlers } from './handlers/ai'
 import { registerVectorsHandlers } from './handlers/vectors'
@@ -106,6 +107,7 @@ app.whenReady().then(() => {
   registerSqliteHandlers()
   registerSettingsHandlers()
   registerGenresHandlers()
+  registerProjectsHandlers()
   registerThumbnailsHandlers()
   registerAIHandlers()
   registerVectorsHandlers()

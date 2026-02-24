@@ -8,6 +8,13 @@
       "when": 1771813049386,
       "tag": "0000_nappy_human_fly",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1771892013416,
+      "tag": "0001_shiny_tomorrow_man",
+      "breakpoints": true
     }
   ]
 }

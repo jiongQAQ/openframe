@@ -16,6 +16,9 @@ importers:
       '@openframe/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@openframe/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@tanstack/db':
         specifier: ^0.5.28
         version: 0.5.28(typescript@5.9.3)

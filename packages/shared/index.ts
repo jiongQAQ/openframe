@@ -1,1 +1,1 @@
-export * as contants from './constants'
+export * from './constants'
