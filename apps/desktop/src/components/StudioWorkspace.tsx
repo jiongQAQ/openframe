@@ -2,13 +2,16 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2 } from 'lucide-react'
 import { ScriptEditor } from './ScriptEditor'
+import { seriesCollection } from '../db/series_collection'
 
 interface StudioWorkspaceProps {
+  seriesId: string
   projectName: string
   seriesTitle: string
+  scriptContent: string
 }
 
-export function StudioWorkspace({ projectName, seriesTitle }: StudioWorkspaceProps) {
+export function StudioWorkspace({ seriesId, projectName, seriesTitle, scriptContent }: StudioWorkspaceProps) {
   const { t } = useTranslation()
 
   const workflowSteps = useMemo(
@@ -47,7 +50,15 @@ export function StudioWorkspace({ projectName, seriesTitle }: StudioWorkspacePro
       </div>
 
       <div className="p-5 flex-1 min-h-0">
-        <ScriptEditor />
+        <ScriptEditor
+          content={scriptContent}
+          onContentChange={(nextContent) => {
+            if (!seriesId) return
+            seriesCollection.update(seriesId, (draft) => {
+              draft.script = nextContent
+            })
+          }}
+        />
       </div>
     </main>
   )

@@ -43,6 +43,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         id: crypto.randomUUID(),
         project_id: projectId,
         title: `${t('projectLibrary.seriesNo')}${nextSortIndex}`,
+        script: '',
         sort_index: nextSortIndex,
         thumbnail: null,
         duration,
@@ -82,8 +83,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   if (isStudioWindow) {
     return (
       <StudioWorkspace
+        seriesId={selectedSeries?.id ?? ''}
         projectName={project.name}
         seriesTitle={selectedSeries?.title ?? t('projectLibrary.seriesNo')}
+        scriptContent={selectedSeries?.script ?? ''}
       />
     )
   }

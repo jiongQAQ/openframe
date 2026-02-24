@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { AI_PROVIDERS, type AIConfig } from '@openframe/providers'
 import { useTranslation } from 'react-i18next'
@@ -62,22 +63,8 @@ type AutocompleteGhostMeta = {
   text: string
 }
 
-function escapeHtml(raw: string): string {
-  return raw
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-function textToBlockHtml(raw: string): string {
-  const normalized = raw.replace(/\r\n/g, '\n')
-  const blocks = normalized.split(/\n{2,}/)
-  if (blocks.length === 0) return ''
-  return blocks
-    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`)
-    .join('')
+function isLikelyHtml(raw: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(raw)
 }
 
 function createGhostDom(text: string): HTMLElement {
@@ -156,7 +143,12 @@ function getTextModelOptions(config: AIConfig): TextModelOption[] {
   return result
 }
 
-export function ScriptEditor() {
+interface ScriptEditorProps {
+  content: string
+  onContentChange: (content: string) => void
+}
+
+export function ScriptEditor({ content, onContentChange }: ScriptEditorProps) {
   const { t } = useTranslation()
   const [editorTick, setEditorTick] = useState(0)
   const [aiBusy, setAiBusy] = useState(false)
@@ -172,13 +164,20 @@ export function ScriptEditor() {
   const activeStreamKindRef = useRef<'scene.expand' | 'scene.autocomplete' | null>(null)
   const autocompleteTimerRef = useRef<number | null>(null)
   const autocompleteArmedRef = useRef(false)
+  const saveTimerRef = useRef<number | null>(null)
+  const lastSavedContentRef = useRef(content)
   const editorPaneRef = useRef<HTMLDivElement | null>(null)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
   const modelMenuRef = useRef<HTMLDivElement | null>(null)
+  const initialContentType = useMemo<'html' | 'markdown'>(
+    () => (isLikelyHtml(content) ? 'html' : 'markdown'),
+    [content],
+  )
 
   const editor = useEditor({
-    extensions: [StarterKit],
-    content: '',
+    extensions: [StarterKit, Markdown],
+    content: content || '',
+    contentType: initialContentType,
     editorProps: {
       attributes: {
         class:
@@ -188,9 +187,32 @@ export function ScriptEditor() {
     onCreate: ({ editor: nextEditor }) => {
       nextEditor.registerPlugin(createAutocompleteGhostPlugin())
     },
-    onUpdate: () => setEditorTick((v) => v + 1),
+    onUpdate: ({ editor: nextEditor }) => {
+      setEditorTick((v) => v + 1)
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current)
+      }
+      saveTimerRef.current = window.setTimeout(() => {
+        const nextContent = nextEditor.getMarkdown()
+        if (nextContent === lastSavedContentRef.current) return
+        lastSavedContentRef.current = nextContent
+        onContentChange(nextContent)
+      }, 350)
+    },
     onSelectionUpdate: () => setEditorTick((v) => v + 1),
   })
+
+  useEffect(() => {
+    if (!editor) return
+    const currentMarkdown = editor.getMarkdown()
+    if (content === currentMarkdown) return
+    lastSavedContentRef.current = content || ''
+    if (isLikelyHtml(content)) {
+      editor.commands.setContent(content || '', { contentType: 'html' })
+    } else {
+      editor.commands.setContent(content || '', { contentType: 'markdown' })
+    }
+  }, [content, editor])
 
   function clearActiveStream() {
     activeStreamRequestIdRef.current = null
@@ -526,9 +548,11 @@ export function ScriptEditor() {
     if (!editor || !autocompleteDraft?.displayText) return
     const { empty, head } = editor.state.selection
     if (!empty || head !== autocompleteDraft.insertPos) return
-    const html = textToBlockHtml(autocompleteDraft.displayText)
-    if (!html) return
-    editor.chain().focus().insertContentAt(autocompleteDraft.insertPos, html).run()
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(autocompleteDraft.insertPos, autocompleteDraft.displayText, { contentType: 'markdown' })
+      .run()
     clearActiveStream()
     clearAutocompleteDraft()
   }
@@ -628,6 +652,9 @@ export function ScriptEditor() {
   useEffect(() => {
     return () => {
       clearAutocompleteTimer()
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current)
+      }
     }
   }, [])
 

@@ -37,6 +37,7 @@ type SeriesRow = {
   id: string
   project_id: string
   title: string
+  script: string
   sort_index: number
   thumbnail: string | null
   duration: number

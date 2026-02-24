@@ -16,6 +16,7 @@ export const series = sqliteTable('series', {
   id: text('id').primaryKey(),
   project_id: text('project_id').notNull(),
   title: text('title').notNull().$default(() => ''),
+  script: text('script').notNull().$default(() => ''),
   sort_index: integer('sort_index').notNull(),
   thumbnail: text('thumbnail'),
   duration: integer('duration').notNull(),

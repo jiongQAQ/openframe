@@ -5,6 +5,7 @@ type SeriesRow = {
   id: string
   project_id: string
   title: string
+  script: string
   sort_index: number
   thumbnail: string | null
   duration: number
@@ -24,7 +25,7 @@ export function registerSeriesHandlers() {
     const raw = getRawDb()
     return raw
       .prepare(
-        'SELECT id, project_id, title, sort_index, thumbnail, duration, created_at FROM series ORDER BY created_at DESC',
+        'SELECT id, project_id, title, script, sort_index, thumbnail, duration, created_at FROM series ORDER BY created_at DESC',
       )
       .all() as SeriesRow[]
   })
@@ -33,7 +34,7 @@ export function registerSeriesHandlers() {
     const raw = getRawDb()
     return raw
       .prepare(
-        'SELECT id, project_id, title, sort_index, thumbnail, duration, created_at FROM series WHERE project_id = ? ORDER BY sort_index ASC, created_at ASC',
+        'SELECT id, project_id, title, script, sort_index, thumbnail, duration, created_at FROM series WHERE project_id = ? ORDER BY sort_index ASC, created_at ASC',
       )
       .all(projectId) as SeriesRow[]
   })
@@ -42,9 +43,9 @@ export function registerSeriesHandlers() {
     const raw = getRawDb()
     raw
       .prepare(
-        'INSERT INTO series (id, project_id, title, sort_index, thumbnail, duration, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO series (id, project_id, title, script, sort_index, thumbnail, duration, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run(series.id, series.project_id, series.title, series.sort_index, series.thumbnail, series.duration, series.created_at)
+      .run(series.id, series.project_id, series.title, series.script, series.sort_index, series.thumbnail, series.duration, series.created_at)
     syncProjectSeriesCount(series.project_id)
   })
 
@@ -52,9 +53,9 @@ export function registerSeriesHandlers() {
     const raw = getRawDb()
     raw
       .prepare(
-        'UPDATE series SET title = ?, sort_index = ?, thumbnail = ?, duration = ? WHERE id = ?',
+        'UPDATE series SET title = ?, script = ?, sort_index = ?, thumbnail = ?, duration = ? WHERE id = ?',
       )
-      .run(series.title, series.sort_index, series.thumbnail, series.duration, series.id)
+      .run(series.title, series.script, series.sort_index, series.thumbnail, series.duration, series.id)
   })
 
   ipcMain.handle('series:delete', (_event, id: string) => {
