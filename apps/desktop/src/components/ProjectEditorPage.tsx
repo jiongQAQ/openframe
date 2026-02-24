@@ -76,7 +76,7 @@ function GenrePickerModal({ open, genres, selectedGenreId, onSelect, onClose, t 
   return (
     <dialog className="modal modal-open">
       <div className="modal-box max-w-5xl p-0 border border-base-300 shadow-2xl">
-        <div className="px-6 py-5 border-b border-base-300 bg-gradient-to-r from-base-200 to-base-100">
+        <div className="px-6 py-5 border-b border-base-300 bg-linear-to-r from-base-200 to-base-100">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="font-semibold text-base leading-none">{t('projectLibrary.genrePickerTitle')}</h3>
@@ -120,7 +120,7 @@ function GenrePickerModal({ open, genres, selectedGenreId, onSelect, onClose, t 
                         {getThumbnailSrc(genre.thumbnail) ? (
                           <img src={getThumbnailSrc(genre.thumbnail)!} alt={genre.name} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-base-200 to-base-300" />
+                          <div className="w-full h-full bg-linear-to-br from-base-200 to-base-300" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">

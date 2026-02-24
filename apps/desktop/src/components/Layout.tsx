@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import {
@@ -28,6 +28,22 @@ export default function Layout({ children }: LayoutProps) {
   const { t } = useTranslation()
   const { location } = useRouterState()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const isStudioWindow = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('studio') === '1'
+  }, [location.search])
+
+  if (isStudioWindow) {
+    return (
+      <>
+        <div
+          className="h-10 w-full shrink-0 select-none"
+          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        />
+        <div className="flex-1 overflow-auto">{children}</div>
+      </>
+    )
+  }
 
   return (
     <>

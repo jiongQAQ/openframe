@@ -144,6 +144,11 @@ contextBridge.exposeInMainWorld('seriesAPI', {
   delete: (id: string): Promise<void> => ipcRenderer.invoke('series:delete', id),
 })
 
+contextBridge.exposeInMainWorld('windowAPI', {
+  openStudio: (payload: { projectId: string; seriesId: string }): Promise<void> =>
+    ipcRenderer.invoke('window:openStudio', payload),
+})
+
 contextBridge.exposeInMainWorld('categoriesAPI', {
   getAll: (): Promise<CategoryRow[]> => ipcRenderer.invoke('categories:getAll'),
   insert: (category: CategoryRow): Promise<void> => ipcRenderer.invoke('categories:insert', category),

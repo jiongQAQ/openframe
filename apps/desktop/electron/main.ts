@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -66,6 +66,31 @@ function createWindow() {
   }
 }
 
+function createStudioWindow(projectId: string, seriesId: string) {
+  const display = screen.getPrimaryDisplay()
+  const { x, y, width, height } = display.workArea
+
+  const studioWin = new BrowserWindow({
+    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    titleBarStyle: 'hiddenInset',
+    x,
+    y,
+    width,
+    height,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+    },
+  })
+
+  const studioHashPath = `/projects/${encodeURIComponent(projectId)}?studio=1&projectId=${encodeURIComponent(projectId)}&seriesId=${encodeURIComponent(seriesId)}`
+
+  if (VITE_DEV_SERVER_URL) {
+    studioWin.loadURL(`${VITE_DEV_SERVER_URL}#${studioHashPath}`)
+  } else {
+    studioWin.loadURL(`file://${path.join(RENDERER_DIST, 'index.html')}#${studioHashPath}`)
+  }
+}
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
@@ -114,5 +139,10 @@ app.whenReady().then(() => {
   registerAIHandlers()
   registerVectorsHandlers()
   registerDataHandlers()
+
+  ipcMain.handle('window:openStudio', (_event, payload: { projectId: string; seriesId: string }) => {
+    createStudioWindow(payload.projectId, payload.seriesId)
+  })
+
   createWindow()
 })

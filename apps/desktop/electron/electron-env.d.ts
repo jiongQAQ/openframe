@@ -89,6 +89,9 @@ interface Window {
     update: (series: SeriesRow) => Promise<void>
     delete: (id: string) => Promise<void>
   }
+  windowAPI: {
+    openStudio: (payload: { projectId: string; seriesId: string }) => Promise<void>
+  }
   categoriesAPI: {
     getAll: () => Promise<CategoryRow[]>
     insert: (category: CategoryRow) => Promise<void>

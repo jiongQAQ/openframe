@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from '@tanstack/react-db'
 import { ArrowLeft, Clock3, Play, Plus, Trash2 } from 'lucide-react'
 import { projectsCollection } from '../db/projects_collection'
 import { seriesCollection } from '../db/series_collection'
+import { StudioWorkspace } from './StudioWorkspace'
 
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { location } = useRouterState()
   const { data: projects } = useLiveQuery(projectsCollection)
   const { data: allSeries } = useLiveQuery(seriesCollection)
 
@@ -17,9 +19,20 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     () => (allSeries ?? []).filter((item) => item.project_id === projectId).sort((a, b) => a.sort_index - b.sort_index),
     [allSeries, projectId],
   )
+  const selectedSeriesId = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('seriesId')
+  }, [location.search])
+  const isStudioWindow = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('studio') === '1'
+  }, [location.search])
+  const selectedSeries = useMemo(
+    () => series.find((item) => item.id === selectedSeriesId) ?? null,
+    [series, selectedSeriesId],
+  )
 
   const [saving, setSaving] = useState(false)
-
   async function handleAddSeries() {
     const duration = 0
 
@@ -50,6 +63,14 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     })
   }
 
+  async function handleEnterCreation(seriesId: string) {
+    try {
+      await window.windowAPI.openStudio({ projectId, seriesId })
+    } catch {
+      // ignore open failures for now
+    }
+  }
+
   if (!project) {
     return (
       <main className="flex-1 p-6 overflow-auto">
@@ -58,8 +79,18 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     )
   }
 
+  if (isStudioWindow) {
+    return (
+      <StudioWorkspace
+        projectName={project.name}
+        seriesTitle={selectedSeries?.title ?? t('projectLibrary.seriesNo')}
+        onBack={() => navigate({ to: '/projects/$projectId', params: { projectId } })}
+      />
+    )
+  }
+
   return (
-    <main className="flex-1 p-6 overflow-auto bg-gradient-to-br from-base-200/40 via-base-100 to-base-200/20">
+    <main className="flex-1 p-6 overflow-auto bg-linear-to-br from-base-200/40 via-base-100 to-base-200/20">
       <div className="max-w-full">
         <div className="flex items-start justify-between mb-5">
           <div>
@@ -98,7 +129,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
               </div>
 
               <div className="border-t border-base-300 pt-3 flex justify-end">
-                <button type="button" className="btn btn-primary btn-xs">
+                <button type="button" className="btn btn-primary btn-xs" onClick={() => void handleEnterCreation(item.id)}>
                   <Play size={12} />
                   {t('projectLibrary.enterCreation')}
                 </button>
