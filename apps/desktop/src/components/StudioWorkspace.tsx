@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Clock3, Loader2, ListChecks, XCircle } from 'lucide-react'
 import { AI_PROVIDERS, type AIConfig } from '@openframe/providers'
+import PQueue from 'p-queue'
 import { ScriptEditor } from './ScriptEditor'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
 import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
+import { ShotPanel, type ShotCard, type ShotDraft } from './ShotPanel'
 import { seriesCollection } from '../db/series_collection'
 import type { Character } from '../db/characters_collection'
 
@@ -21,6 +23,16 @@ type Scene = {
   description: string
   shot_notes: string
   thumbnail: string | null
+  created_at: number
+}
+
+type StudioTaskStatus = 'queued' | 'running' | 'success' | 'error'
+
+type StudioTaskItem = {
+  id: string
+  title: string
+  status: StudioTaskStatus
+  message: string
   created_at: number
 }
 
@@ -44,7 +56,7 @@ export function StudioWorkspace({
   scriptContent,
 }: StudioWorkspaceProps) {
   const { t } = useTranslation()
-  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'storyboard'>('script')
+  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'storyboard' | 'shot'>('script')
   const [extractMode, setExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [sceneExtractMode, setSceneExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [characterBusyId, setCharacterBusyId] = useState<string | null>(null)
@@ -53,6 +65,14 @@ export function StudioWorkspace({
   const [projectCharacters, setProjectCharacters] = useState<Character[]>([])
   const [sceneError, setSceneError] = useState('')
   const [seriesScenes, setSeriesScenes] = useState<Scene[]>([])
+  const [shotError, setShotError] = useState('')
+  const [seriesShots, setSeriesShots] = useState<ShotCard[]>([])
+  const [generatingShotsFromScript, setGeneratingShotsFromScript] = useState(false)
+  const [generatingShotImages, setGeneratingShotImages] = useState(false)
+  const [generatingShotId, setGeneratingShotId] = useState<string | null>(null)
+  const [taskQueue, setTaskQueue] = useState<StudioTaskItem[]>([])
+  const [queueOpen, setQueueOpen] = useState(true)
+  const queueRef = useRef(new PQueue({ concurrency: 1 }))
   const [textModelOptions, setTextModelOptions] = useState<Array<{ key: string; label: string }>>([])
   const [selectedTextModelKey, setSelectedTextModelKey] = useState('')
   const [imageModelOptions, setImageModelOptions] = useState<Array<{ key: string; label: string }>>([])
@@ -87,6 +107,25 @@ export function StudioWorkspace({
       })
       .catch(() => {
         if (active) setSeriesScenes([])
+      })
+    return () => {
+      active = false
+    }
+  }, [seriesId])
+
+  useEffect(() => {
+    let active = true
+    if (!seriesId) {
+      setSeriesShots([])
+      return
+    }
+    window.shotsAPI
+      .getBySeries(seriesId)
+      .then((rows) => {
+        if (active) setSeriesShots(rows)
+      })
+      .catch(() => {
+        if (active) setSeriesShots([])
       })
     return () => {
       active = false
@@ -158,6 +197,7 @@ export function StudioWorkspace({
 
   const showCharacterPanel = activeStep === 'character'
   const showScenePanel = activeStep === 'storyboard'
+  const showShotPanel = activeStep === 'shot'
 
   function normalizeCharacterName(name: string): string {
     return name.trim().toLowerCase()
@@ -204,6 +244,54 @@ export function StudioWorkspace({
     }
   }
 
+  function updateTask(id: string, patch: Partial<StudioTaskItem>) {
+    setTaskQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  function enqueueTask(title: string, runner: () => Promise<void>) {
+    const id = crypto.randomUUID()
+    setTaskQueue((prev) => [
+      ...prev,
+      {
+        id,
+        title,
+        status: 'queued',
+        message: t('projectLibrary.taskQueued'),
+        created_at: Date.now(),
+      },
+    ])
+
+    void queueRef.current.add(async () => {
+      updateTask(id, { status: 'running', message: t('projectLibrary.taskRunning') })
+      try {
+        await runner()
+        updateTask(id, { status: 'success', message: t('projectLibrary.taskSuccess') })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('projectLibrary.taskFailed')
+        updateTask(id, { status: 'error', message: msg })
+      }
+    })
+  }
+
+  function toThumbUrl(value: string | null): string | null {
+    if (!value) return null
+    if (/^(https?:|data:|blob:|openframe-thumb:)/i.test(value)) return value
+    return `openframe-thumb://local?path=${encodeURIComponent(value)}`
+  }
+
+  async function readThumbnailAsBytes(value: string | null): Promise<Uint8Array | null> {
+    const src = toThumbUrl(value)
+    if (!src) return null
+    try {
+      const res = await fetch(src)
+      if (!res.ok) return null
+      const buf = new Uint8Array(await res.arrayBuffer())
+      return buf.length > 0 ? buf : null
+    } catch {
+      return null
+    }
+  }
+
   function mergeCharacters(existing: Character[], extracted: Character[]): Character[] {
     const next = [...existing]
     const nameIndex = new Map<string, number>()
@@ -244,37 +332,39 @@ export function StudioWorkspace({
 
     setExtractMode(mode)
     setCharacterError('')
-    try {
-      const result = await window.aiAPI.extractCharactersFromScript({
-        script: scriptContent,
-        modelKey: selectedTextModelKey || undefined,
-      })
-      if (!result.ok) {
-        setCharacterError(result.error)
-        return
+    enqueueTask(mode === 'replace' ? t('projectLibrary.characterRegenerate') : t('projectLibrary.characterFromDraft'), async () => {
+      try {
+        const result = await window.aiAPI.extractCharactersFromScript({
+          script: scriptContent,
+          modelKey: selectedTextModelKey || undefined,
+        })
+        if (!result.ok) {
+          setCharacterError(result.error)
+          return
+        }
+
+        const extractedRows = result.characters.map((item, index) => ({
+          id: crypto.randomUUID(),
+          project_id: projectId,
+          name: item.name,
+          gender: normalizeGender(item.gender),
+          age: normalizeAge(item.age),
+          personality: item.personality,
+          thumbnail: null,
+          appearance: item.appearance,
+          background: item.background,
+          created_at: Date.now() + index,
+        }))
+
+        const nextRows = mode === 'replace' ? extractedRows : mergeCharacters(projectCharacters, extractedRows)
+        await window.charactersAPI.replaceByProject({ projectId, characters: nextRows })
+        setProjectCharacters(nextRows)
+      } catch {
+        setCharacterError(t('projectLibrary.aiToolkitFailed'))
+      } finally {
+        setExtractMode(null)
       }
-
-      const extractedRows = result.characters.map((item, index) => ({
-        id: crypto.randomUUID(),
-        project_id: projectId,
-        name: item.name,
-        gender: normalizeGender(item.gender),
-        age: normalizeAge(item.age),
-        personality: item.personality,
-        thumbnail: null,
-        appearance: item.appearance,
-        background: item.background,
-        created_at: Date.now() + index,
-      }))
-
-      const nextRows = mode === 'replace' ? extractedRows : mergeCharacters(projectCharacters, extractedRows)
-      await window.charactersAPI.replaceByProject({ projectId, characters: nextRows })
-      setProjectCharacters(nextRows)
-    } catch {
-      setCharacterError(t('projectLibrary.aiToolkitFailed'))
-    } finally {
-      setExtractMode(null)
-    }
+    })
   }
 
   async function handleExtractCharactersFromScript() {
@@ -608,37 +698,39 @@ export function StudioWorkspace({
 
     setSceneExtractMode(mode)
     setSceneError('')
-    try {
-      const result = await window.aiAPI.extractScenesFromScript({
-        script: scriptContent,
-        modelKey: selectedTextModelKey || undefined,
-      })
-      if (!result.ok) {
-        setSceneError(result.error)
-        return
+    enqueueTask(mode === 'replace' ? t('projectLibrary.sceneRegenerate') : t('projectLibrary.sceneFromDraft'), async () => {
+      try {
+        const result = await window.aiAPI.extractScenesFromScript({
+          script: scriptContent,
+          modelKey: selectedTextModelKey || undefined,
+        })
+        if (!result.ok) {
+          setSceneError(result.error)
+          return
+        }
+
+        const extractedRows: Scene[] = result.scenes.map((item, index) => ({
+          id: crypto.randomUUID(),
+          series_id: seriesId,
+          title: item.title,
+          location: item.location,
+          time: item.time,
+          mood: item.mood,
+          description: item.description,
+          shot_notes: item.shot_notes,
+          thumbnail: null,
+          created_at: Date.now() + index,
+        }))
+
+        const nextRows = mode === 'replace' ? extractedRows : mergeScenes(seriesScenes, extractedRows)
+        await window.scenesAPI.replaceBySeries({ seriesId, scenes: nextRows })
+        setSeriesScenes(nextRows)
+      } catch {
+        setSceneError(t('projectLibrary.aiToolkitFailed'))
+      } finally {
+        setSceneExtractMode(null)
       }
-
-      const extractedRows: Scene[] = result.scenes.map((item, index) => ({
-        id: crypto.randomUUID(),
-        series_id: seriesId,
-        title: item.title,
-        location: item.location,
-        time: item.time,
-        mood: item.mood,
-        description: item.description,
-        shot_notes: item.shot_notes,
-        thumbnail: null,
-        created_at: Date.now() + index,
-      }))
-
-      const nextRows = mode === 'replace' ? extractedRows : mergeScenes(seriesScenes, extractedRows)
-      await window.scenesAPI.replaceBySeries({ seriesId, scenes: nextRows })
-      setSeriesScenes(nextRows)
-    } catch {
-      setSceneError(t('projectLibrary.aiToolkitFailed'))
-    } finally {
-      setSceneExtractMode(null)
-    }
+    })
   }
 
   async function handleExtractScenesFromScript() {
@@ -907,6 +999,287 @@ export function StudioWorkspace({
     }
   }
 
+  function makeShotIndex(nextShots: ShotCard[]): ShotCard[] {
+    return nextShots
+      .slice()
+      .sort((a, b) => a.shot_index - b.shot_index || a.created_at - b.created_at)
+      .map((shot, index) => ({ ...shot, shot_index: index + 1 }))
+  }
+
+  async function addShot(draft: ShotDraft) {
+    if (!seriesId) return
+    setShotError('')
+    try {
+      const next: ShotCard[] = makeShotIndex([
+        ...seriesShots,
+        {
+          ...draft,
+          id: crypto.randomUUID(),
+          series_id: seriesId,
+          shot_index: seriesShots.length + 1,
+          thumbnail: null,
+          created_at: Date.now(),
+        },
+      ])
+      await window.shotsAPI.replaceBySeries({ seriesId, shots: next })
+      setSeriesShots(next)
+    } catch {
+      setShotError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function updateShot(id: string, draft: ShotDraft) {
+    setShotError('')
+    try {
+      const next = makeShotIndex(
+        seriesShots.map((shot) =>
+          shot.id === id
+            ? {
+                ...shot,
+                ...draft,
+              }
+            : shot,
+        ),
+      )
+      await window.shotsAPI.replaceBySeries({ seriesId, shots: next })
+      setSeriesShots(next)
+    } catch {
+      setShotError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function deleteShot(id: string, title: string) {
+    const shouldDelete = window.confirm(t('projectLibrary.shotDeleteConfirm', { name: title || t('projectLibrary.shotCardUntitled') }))
+    if (!shouldDelete) return
+    setShotError('')
+    try {
+      const next = makeShotIndex(seriesShots.filter((shot) => shot.id !== id))
+      await window.shotsAPI.replaceBySeries({ seriesId, shots: next })
+      setSeriesShots(next)
+    } catch {
+      setShotError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function generateShotsFromScript() {
+    if (!scriptContent.trim()) {
+      setShotError(t('projectLibrary.aiEditorEmpty'))
+      return
+    }
+    if (!seriesScenes.length) {
+      setShotError(t('projectLibrary.shotNeedScenes'))
+      return
+    }
+
+    setGeneratingShotsFromScript(true)
+    setShotError('')
+    enqueueTask(t('projectLibrary.shotGenerateFromScript'), async () => {
+      try {
+        const result = await window.aiAPI.extractShotsFromScript({
+          script: scriptContent,
+          scenes: seriesScenes.map((scene) => ({ id: scene.id, title: scene.title })),
+          characters: projectCharacters.map((character) => ({ id: character.id, name: character.name })),
+          modelKey: selectedTextModelKey || undefined,
+        })
+
+        if (!result.ok) {
+          setShotError(result.error)
+          return
+        }
+
+        const generated: ShotCard[] = result.shots.map((shot, index) => ({
+          id: crypto.randomUUID(),
+          series_id: seriesId,
+          scene_id: shot.scene_ref,
+          title: shot.title,
+          shot_size: shot.shot_size,
+          camera_angle: shot.camera_angle,
+          camera_move: shot.camera_move,
+          duration_sec: shot.duration_sec,
+          action: shot.action,
+          dialogue: shot.dialogue,
+          character_ids: shot.character_refs,
+          shot_index: index + 1,
+          thumbnail: null,
+          created_at: Date.now() + index,
+        }))
+
+        const next = makeShotIndex(generated)
+        await window.shotsAPI.replaceBySeries({ seriesId, shots: next })
+        setSeriesShots(next)
+      } catch {
+        setShotError(t('projectLibrary.aiToolkitFailed'))
+      } finally {
+        setGeneratingShotsFromScript(false)
+      }
+    })
+  }
+
+  async function generateAllShotImages() {
+    if (!seriesShots.length) {
+      setShotError(t('projectLibrary.shotEmpty'))
+      return
+    }
+
+    setGeneratingShotImages(true)
+    setShotError('')
+
+    const sceneMap = new Map(seriesScenes.map((scene) => [scene.id, scene]))
+    const characterMap = new Map(projectCharacters.map((character) => [character.id, character]))
+
+    async function generateShotImage(shot: ShotCard) {
+      const scene = sceneMap.get(shot.scene_id)
+      const characterNames = shot.character_ids
+        .map((id) => characterMap.get(id)?.name)
+        .filter(Boolean)
+        .join(', ')
+
+      const referenceImages: Uint8Array[] = []
+      const sceneRef = await readThumbnailAsBytes(scene?.thumbnail ?? null)
+      if (sceneRef) referenceImages.push(sceneRef)
+      for (const cid of shot.character_ids.slice(0, 3)) {
+        const cref = await readThumbnailAsBytes(characterMap.get(cid)?.thumbnail ?? null)
+        if (cref) referenceImages.push(cref)
+      }
+
+      const prompt = [
+        'Cinematic storyboard shot keyframe, production-ready, high detail, no watermark text.',
+        'Reference consistency is mandatory: preserve identity, costume, silhouette, and environment composition from reference images.',
+        'If references conflict, prioritize character identity consistency first, then scene continuity.',
+        `Project category: ${projectCategory || 'unknown'}`,
+        `Project style: ${projectGenre || 'unknown'}`,
+        `Shot title: ${shot.title || 'untitled shot'}`,
+        `Shot size: ${shot.shot_size || 'unknown'}`,
+        `Camera angle: ${shot.camera_angle || 'unknown'}`,
+        `Camera movement: ${shot.camera_move || 'unknown'}`,
+        `Action: ${shot.action || 'unknown'}`,
+        `Dialogue: ${shot.dialogue || 'none'}`,
+        `Scene: ${scene?.title || 'unknown'}`,
+        `Location: ${scene?.location || 'unknown'}`,
+        `Time: ${scene?.time || 'unknown'}`,
+        `Mood: ${scene?.mood || 'unknown'}`,
+        characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
+      ].join('\n')
+
+      const result = await window.aiAPI.generateImage({
+        prompt: referenceImages.length > 0 ? { text: prompt, images: referenceImages.map((v) => Array.from(v)) } : prompt,
+        modelKey: selectedImageModelKey || undefined,
+      })
+
+      if (!result.ok) {
+        setShotError(result.error)
+        return
+      }
+
+      const bytes = new Uint8Array(result.data)
+      const ext = extFromMediaType(result.mediaType)
+      const savedPath = await window.thumbnailsAPI.save(bytes, ext)
+
+      const updatedShot: ShotCard = {
+        ...shot,
+        thumbnail: savedPath,
+      }
+      await window.shotsAPI.update(updatedShot)
+      setSeriesShots((prev) =>
+        prev.map((item) =>
+          item.id === shot.id
+            ? {
+                ...item,
+                thumbnail: savedPath,
+              }
+            : item,
+        ),
+      )
+    }
+
+    const shotsToGenerate = [...seriesShots]
+    let remaining = shotsToGenerate.length
+
+    for (const shot of shotsToGenerate) {
+      const taskTitle = `${t('projectLibrary.shotGenerateSingleImage')} · #${shot.shot_index} ${shot.title || t('projectLibrary.shotCardUntitled')}`
+      enqueueTask(taskTitle, async () => {
+        try {
+          await generateShotImage(shot)
+        } finally {
+          remaining -= 1
+          if (remaining <= 0) {
+            setGeneratingShotImages(false)
+          }
+        }
+      })
+    }
+  }
+
+  async function generateSingleShotImage(id: string) {
+    const shot = seriesShots.find((item) => item.id === id)
+    if (!shot) return
+    setGeneratingShotId(id)
+    setShotError('')
+    try {
+      const sceneMap = new Map(seriesScenes.map((scene) => [scene.id, scene]))
+      const characterMap = new Map(projectCharacters.map((character) => [character.id, character]))
+      const scene = sceneMap.get(shot.scene_id)
+      const characterNames = shot.character_ids
+        .map((cid) => characterMap.get(cid)?.name)
+        .filter(Boolean)
+        .join(', ')
+
+      const referenceImages: Uint8Array[] = []
+      const sceneRef = await readThumbnailAsBytes(scene?.thumbnail ?? null)
+      if (sceneRef) referenceImages.push(sceneRef)
+      for (const cid of shot.character_ids.slice(0, 3)) {
+        const cref = await readThumbnailAsBytes(characterMap.get(cid)?.thumbnail ?? null)
+        if (cref) referenceImages.push(cref)
+      }
+
+      const prompt = [
+        'Cinematic storyboard shot keyframe, production-ready, high detail, no watermark text.',
+        'Reference consistency is mandatory: preserve identity, costume, silhouette, and environment composition from reference images.',
+        'If references conflict, prioritize character identity consistency first, then scene continuity.',
+        `Project category: ${projectCategory || 'unknown'}`,
+        `Project style: ${projectGenre || 'unknown'}`,
+        `Shot title: ${shot.title || 'untitled shot'}`,
+        `Shot size: ${shot.shot_size || 'unknown'}`,
+        `Camera angle: ${shot.camera_angle || 'unknown'}`,
+        `Camera movement: ${shot.camera_move || 'unknown'}`,
+        `Action: ${shot.action || 'unknown'}`,
+        `Dialogue: ${shot.dialogue || 'none'}`,
+        `Scene: ${scene?.title || 'unknown'}`,
+        `Location: ${scene?.location || 'unknown'}`,
+        `Time: ${scene?.time || 'unknown'}`,
+        `Mood: ${scene?.mood || 'unknown'}`,
+        characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
+      ].join('\n')
+
+      const result = await window.aiAPI.generateImage({
+        prompt: referenceImages.length > 0 ? { text: prompt, images: referenceImages.map((v) => Array.from(v)) } : prompt,
+        modelKey: selectedImageModelKey || undefined,
+      })
+
+      if (!result.ok) {
+        setShotError(result.error)
+        return
+      }
+
+      const bytes = new Uint8Array(result.data)
+      const ext = extFromMediaType(result.mediaType)
+      const savedPath = await window.thumbnailsAPI.save(bytes, ext)
+      await window.shotsAPI.update({ ...shot, thumbnail: savedPath })
+      setSeriesShots((prev) => prev.map((item) => (item.id === id ? { ...item, thumbnail: savedPath } : item)))
+    } catch {
+      setShotError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setGeneratingShotId(null)
+    }
+  }
+
+  function renderTaskStatusIcon(status: StudioTaskStatus) {
+    if (status === 'queued') return <Clock3 size={12} className="text-base-content/55" />
+    if (status === 'running') return <Loader2 size={12} className="text-info animate-spin" />
+    if (status === 'success') return <CheckCircle2 size={12} className="text-success" />
+    return <XCircle size={12} className="text-error" />
+  }
+
   return (
     <main className="h-full w-full overflow-hidden flex flex-col bg-linear-to-br from-base-200/40 via-base-100 to-base-200/30 text-base-content">
       <div className="sticky top-0 z-10 border-b border-base-300 bg-base-100/90 backdrop-blur">
@@ -922,12 +1295,12 @@ export function StudioWorkspace({
                 key={step.key}
                 type="button"
                 onClick={() => {
-                  if (step.key === 'script' || step.key === 'character' || step.key === 'storyboard') setActiveStep(step.key)
+                  if (step.key === 'script' || step.key === 'character' || step.key === 'storyboard' || step.key === 'shot') setActiveStep(step.key)
                 }}
                 className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 border shrink-0 text-sm font-medium transition-colors ${
-                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'storyboard' && step.key === 'storyboard')
+                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'storyboard' && step.key === 'storyboard') || (activeStep === 'shot' && step.key === 'shot')
                     ? 'border-primary/40 bg-primary/10 text-primary'
-                    : idx <= 2
+                    : idx <= 3
                       ? 'border-base-300 hover:border-primary/30 text-base-content/70'
                       : 'border-base-300 text-base-content/45'
                 }`}
@@ -943,6 +1316,7 @@ export function StudioWorkspace({
       <div className="p-5 flex-1 min-h-0">
         {characterError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{characterError}</div> : null}
         {sceneError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{sceneError}</div> : null}
+        {shotError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{shotError}</div> : null}
         {showCharacterPanel ? (
           <CharacterPanel
             characters={projectCharacters}
@@ -989,6 +1363,21 @@ export function StudioWorkspace({
             onGenerateSceneImage={(id) => void handleGenerateSceneImage(id)}
             onUploadSceneImage={(id) => void handleUploadSceneImage(id)}
           />
+        ) : showShotPanel ? (
+          <ShotPanel
+            shots={seriesShots}
+            scenes={seriesScenes.map((scene) => ({ id: scene.id, title: scene.title }))}
+            characters={projectCharacters.map((character) => ({ id: character.id, name: character.name }))}
+            generatingFromScript={generatingShotsFromScript}
+            generatingAllImages={generatingShotImages}
+            generatingShotId={generatingShotId}
+            onAddShot={addShot}
+            onUpdateShot={updateShot}
+            onDeleteShot={deleteShot}
+            onGenerateFromScript={() => void generateShotsFromScript()}
+            onGenerateAllImages={() => void generateAllShotImages()}
+            onGenerateSingleImage={(id) => void generateSingleShotImage(id)}
+          />
         ) : (
           <ScriptEditor
             content={scriptContent}
@@ -1000,6 +1389,43 @@ export function StudioWorkspace({
             }}
           />
         )}
+      </div>
+
+      <div className="fixed right-4 bottom-4 z-20 w-[320px]">
+        <div className="rounded-xl border border-base-300 bg-base-100/95 backdrop-blur shadow-lg overflow-hidden">
+          <button
+            type="button"
+            className="w-full px-3 py-2 flex items-center justify-between text-sm font-medium border-b border-base-300"
+            onClick={() => setQueueOpen((prev) => !prev)}
+          >
+            <span className="inline-flex items-center gap-2">
+              <ListChecks size={14} />
+              {t('projectLibrary.taskQueueTitle')}
+            </span>
+            <span className="text-xs text-base-content/60">{taskQueue.length}</span>
+          </button>
+
+          {queueOpen ? (
+            <div className="max-h-56 overflow-auto p-2 space-y-1.5">
+              {taskQueue.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-base-content/60">{t('projectLibrary.taskQueueEmpty')}</div>
+              ) : (
+                taskQueue
+                  .slice()
+                  .sort((a, b) => a.created_at - b.created_at)
+                  .map((task) => (
+                    <div key={task.id} className="rounded-md border border-base-300 px-2 py-1.5">
+                      <div className="flex items-center gap-2 text-xs">
+                        {renderTaskStatusIcon(task.status)}
+                        <span className="line-clamp-1 font-medium">{task.title}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-base-content/65 line-clamp-2">{task.message}</div>
+                    </div>
+                  ))
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
     </main>
   )

@@ -61,6 +61,7 @@ export function registerProjectsHandlers() {
     const raw = getRawDb()
     raw.prepare('DELETE FROM characters WHERE project_id = ?').run(id)
     raw.prepare('DELETE FROM scenes WHERE series_id IN (SELECT id FROM series WHERE project_id = ?)').run(id)
+    raw.prepare('DELETE FROM shots WHERE series_id IN (SELECT id FROM series WHERE project_id = ?)').run(id)
     raw.prepare('DELETE FROM series WHERE project_id = ?').run(id)
     raw.prepare('DELETE FROM projects WHERE id = ?').run(id)
   })

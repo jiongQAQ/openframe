@@ -30,6 +30,17 @@ type SceneExtractRow = {
   description: string
   shot_notes: string
 }
+type ShotExtractRow = {
+  title: string
+  scene_ref: string
+  character_refs: string[]
+  shot_size: string
+  camera_angle: string
+  camera_move: string
+  duration_sec: number
+  action: string
+  dialogue: string
+}
 type ScriptToolkitAction =
   | 'scene.expand'
   | 'scene.autocomplete'
@@ -165,6 +176,36 @@ function parseScenes(raw: string): SceneExtractRow[] {
     .filter((row) => row.title)
 }
 
+function parseShots(raw: string): ShotExtractRow[] {
+  const obj = extractJsonObject(raw)
+  const list = Array.isArray(obj?.shots) ? obj.shots : []
+  return list
+    .map((item) => {
+      const row = item as Record<string, unknown>
+      const durationRaw = row.duration_sec
+      const duration =
+        typeof durationRaw === 'number'
+          ? durationRaw
+          : typeof durationRaw === 'string'
+            ? Number(durationRaw)
+            : 0
+      return {
+        title: toText(row.title).trim(),
+        scene_ref: toText(row.scene_ref).trim(),
+        character_refs: Array.isArray(row.character_refs)
+          ? row.character_refs.map((v) => toText(v).trim()).filter(Boolean)
+          : [],
+        shot_size: toText(row.shot_size).trim(),
+        camera_angle: toText(row.camera_angle).trim(),
+        camera_move: toText(row.camera_move).trim(),
+        duration_sec: Number.isFinite(duration) ? Math.max(1, Math.round(duration)) : 3,
+        action: toText(row.action).trim(),
+        dialogue: toText(row.dialogue).trim(),
+      }
+    })
+    .filter((row) => row.title && row.scene_ref)
+}
+
 function stripCliStyleParams(prompt: string): string {
   return prompt
     .replace(/\s--ar\s+\S+/gi, '')
@@ -263,7 +304,7 @@ export function registerAIHandlers() {
     'ai:generateImage',
     async (
       _event,
-      params: { prompt: string; modelKey?: string },
+      params: { prompt: string | { text?: string; images: Array<string | number[]> }; modelKey?: string },
     ): Promise<{ ok: true; data: number[]; mediaType: string } | { ok: false; error: string }> => {
       const config = store.get('ai_config') as AIConfig
       const selectedModel = params.modelKey
@@ -283,7 +324,19 @@ export function registerAIHandlers() {
       }
 
       try {
-        const result = await generateImage({ model: model as Parameters<typeof generateImage>[0]['model'], prompt: params.prompt, n: 1 })
+        const normalizedPrompt =
+          typeof params.prompt === 'string'
+            ? params.prompt
+            : {
+                text: params.prompt.text,
+                images: params.prompt.images.map((img) => (Array.isArray(img) ? new Uint8Array(img) : img)),
+              }
+
+        const result = await generateImage({
+          model: model as Parameters<typeof generateImage>[0]['model'],
+          prompt: normalizedPrompt,
+          n: 1,
+        })
         return {
           ok: true,
           data: Array.from(result.image.uint8Array),
@@ -606,6 +659,56 @@ export function registerAIHandlers() {
           return { ok: false, error: 'Failed to parse scene from model response.' }
         }
         return { ok: true, scene }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: msg.split('\n')[0].slice(0, 200) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ai:extractShotsFromScript',
+    async (
+      _event,
+      params: {
+        script: string
+        scenes: Array<{ id: string; title: string }>
+        characters: Array<{ id: string; name: string }>
+        modelKey?: string
+      },
+    ): Promise<{ ok: true; shots: ShotExtractRow[] } | { ok: false; error: string }> => {
+      const config = store.get('ai_config') as AIConfig
+      const selectedModel = params.modelKey
+        ? (() => {
+            const idx = params.modelKey!.indexOf(':')
+            if (idx === -1) return null
+            const providerId = params.modelKey!.slice(0, idx)
+            const modelId = params.modelKey!.slice(idx + 1)
+            return createProviderModelWithType(providerId, modelId, 'text', config)
+          })()
+        : null
+      const model = selectedModel && isLanguageModel(selectedModel) ? selectedModel : getDefaultTextModel(config)
+      if (!model || !isLanguageModel(model)) {
+        return { ok: false, error: 'No default text model configured.' }
+      }
+
+      const prompt = [
+        'You are a screenplay storyboard planner.',
+        'Generate a practical shot list from the script.',
+        'Each shot must include scene_ref and character_refs, using ONLY provided IDs.',
+        'Do not invent new scene_ref or character_refs values.',
+        'Return STRICT JSON only with shape:',
+        '{"shots":[{"title":"","scene_ref":"","character_refs":[],"shot_size":"","camera_angle":"","camera_move":"","duration_sec":3,"action":"","dialogue":""}]}',
+        'Do not include markdown code fences.',
+        `Scenes:\n${JSON.stringify(params.scenes)}`,
+        `Characters:\n${JSON.stringify(params.characters)}`,
+        `Script:\n${params.script}`,
+      ].join('\n\n')
+
+      try {
+        const { text } = await generateText({ model, prompt })
+        const shots = parseShots(text)
+        return { ok: true, shots }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return { ok: false, error: msg.split('\n')[0].slice(0, 200) }

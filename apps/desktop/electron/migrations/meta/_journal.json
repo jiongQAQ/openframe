@@ -57,6 +57,13 @@
       "when": 1771914586302,
       "tag": "0007_married_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1771919524933,
+      "tag": "0008_familiar_kree",
+      "breakpoints": true
     }
   ]
 }

@@ -67,6 +67,22 @@ type SceneRow = {
   thumbnail: string | null
   created_at: number
 }
+type ShotRow = {
+  id: string
+  series_id: string
+  scene_id: string
+  title: string
+  shot_index: number
+  shot_size: string
+  camera_angle: string
+  camera_move: string
+  duration_sec: number
+  action: string
+  dialogue: string
+  character_ids: string[]
+  thumbnail: string | null
+  created_at: number
+}
 type ChunkSearchResult = { chunk_id: number; document_id: string; content: string; chunk_index: number; distance: number }
 type DataInfo = { defaultDir: string; currentDir: string; pendingDir: string; dbSize: number; thumbsSize: number }
 
@@ -79,7 +95,7 @@ interface Window {
     testConnection: (params: { providerId: string; modelId: string; apiKey: string; baseUrl?: string }) => Promise<{ ok: boolean; error?: string }>
     embed: (text: string) => Promise<number[] | null>
     embedBatch: (texts: string[]) => Promise<number[][] | null>
-    generateImage: (params: { prompt: string; modelKey?: string }) => Promise<{ ok: true; data: number[]; mediaType: string } | { ok: false; error: string }>
+    generateImage: (params: { prompt: string | { text?: string; images: Array<string | number[]> }; modelKey?: string }) => Promise<{ ok: true; data: number[]; mediaType: string } | { ok: false; error: string }>
     styleAgentChat: (params: {
       messages: Array<{ role: 'user' | 'assistant'; content: string }>
       draft: { name: string; code: string; description: string; prompt: string }
@@ -103,6 +119,12 @@ interface Window {
       scene: { title: string; location?: string; time?: string; mood?: string; description?: string; shot_notes?: string }
       modelKey?: string
     }) => Promise<{ ok: true; scene: { title: string; location: string; time: string; mood: string; description: string; shot_notes: string } } | { ok: false; error: string }>
+    extractShotsFromScript: (params: {
+      script: string
+      scenes: Array<{ id: string; title: string }>
+      characters: Array<{ id: string; name: string }>
+      modelKey?: string
+    }) => Promise<{ ok: true; shots: Array<{ title: string; scene_ref: string; character_refs: string[]; shot_size: string; camera_angle: string; camera_move: string; duration_sec: number; action: string; dialogue: string }> } | { ok: false; error: string }>
     scriptToolkit: (params: {
       action:
         | 'scene.expand'
@@ -174,6 +196,14 @@ interface Window {
     update: (scene: SceneRow) => Promise<void>
     delete: (id: string) => Promise<void>
     replaceBySeries: (payload: { seriesId: string; scenes: SceneRow[] }) => Promise<void>
+  }
+  shotsAPI: {
+    getAll: () => Promise<ShotRow[]>
+    getBySeries: (seriesId: string) => Promise<ShotRow[]>
+    insert: (shot: ShotRow) => Promise<void>
+    update: (shot: ShotRow) => Promise<void>
+    delete: (id: string) => Promise<void>
+    replaceBySeries: (payload: { seriesId: string; shots: ShotRow[] }) => Promise<void>
   }
   windowAPI: {
     openStudio: (payload: { projectId: string; seriesId: string }) => Promise<void>

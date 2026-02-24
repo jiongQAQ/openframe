@@ -83,6 +83,7 @@ export function registerScenesHandlers() {
   ipcMain.handle('scenes:replaceBySeries', (_event, payload: { seriesId: string; scenes: SceneRow[] }) => {
     const raw = getRawDb()
     raw.prepare('DELETE FROM scenes WHERE series_id = ?').run(payload.seriesId)
+    raw.prepare('DELETE FROM shots WHERE series_id = ?').run(payload.seriesId)
     const insertStmt = raw.prepare(
       'INSERT INTO scenes (id, series_id, title, location, time, mood, description, shot_notes, thumbnail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
@@ -104,6 +105,7 @@ export function registerScenesHandlers() {
 
   ipcMain.handle('scenes:delete', (_event, id: string) => {
     const raw = getRawDb()
+    raw.prepare('DELETE FROM shots WHERE scene_id = ?').run(id)
     raw.prepare('DELETE FROM scenes WHERE id = ?').run(id)
   })
 }

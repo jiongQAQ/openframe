@@ -10,6 +10,7 @@ import { registerProjectsHandlers } from './handlers/projects'
 import { registerSeriesHandlers } from './handlers/series'
 import { registerCharactersHandlers } from './handlers/characters'
 import { registerScenesHandlers } from './handlers/scenes'
+import { registerShotsHandlers } from './handlers/shots'
 import { registerThumbnailsHandlers } from './handlers/thumbnails'
 import { registerAIHandlers } from './handlers/ai'
 import { registerVectorsHandlers } from './handlers/vectors'
@@ -139,6 +140,7 @@ app.whenReady().then(() => {
   registerSeriesHandlers()
   registerCharactersHandlers()
   registerScenesHandlers()
+  registerShotsHandlers()
   registerThumbnailsHandlers()
   registerAIHandlers()
   registerVectorsHandlers()
