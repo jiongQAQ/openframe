@@ -87,6 +87,8 @@ export default {
     aiStop: 'Stop',
     aiModel: 'Model',
     aiModelEmpty: 'No text model available',
+    aiAutocompleteHint: 'Tab accept, Esc dismiss',
+    aiAutocompleteNeedCursor: 'Place the cursor where you want completion.',
   },
   settings: {
     general: 'General',

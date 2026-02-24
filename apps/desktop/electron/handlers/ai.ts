@@ -16,6 +16,7 @@ type StyleAgentMessage = { role: 'user' | 'assistant'; content: string }
 type StyleDraft = { name: string; code: string; description: string; prompt: string }
 type ScriptToolkitAction =
   | 'scene.expand'
+  | 'scene.autocomplete'
   | 'scene.rewrite'
   | 'scene.dialogue-polish'
   | 'scene.pacing'
@@ -61,6 +62,8 @@ function getScriptToolkitPrompt(action: ScriptToolkitAction, context: string, in
   const actionPrompts: Record<ScriptToolkitAction, string> = {
     'scene.expand':
       'Expand the current scene by enriching action beats, environment details, and emotional texture while preserving the original story intent and chronology. Return only the revised scene text.',
+    'scene.autocomplete':
+      'Continue writing from the cursor position with natural screenplay flow. Respect what appears before and after the cursor, and avoid repeating existing text. Keep clear paragraph and dialogue line breaks where appropriate. Return only the continuation text that should be inserted at cursor.',
     'scene.rewrite':
       'Rewrite the current scene for stronger readability and cinematic flow while keeping all core plot points and outcomes unchanged. Return only the rewritten scene text.',
     'scene.dialogue-polish':
@@ -306,8 +309,8 @@ export function registerAIHandlers() {
         return { ok: false, error: 'No default text model configured.' }
       }
 
-      if (params.action !== 'scene.expand') {
-        return { ok: false, error: 'Streaming is currently supported only for scene.expand.' }
+      if (params.action !== 'scene.expand' && params.action !== 'scene.autocomplete') {
+        return { ok: false, error: 'Streaming is currently supported only for scene.expand and scene.autocomplete.' }
       }
 
       const requestId = crypto.randomUUID()
@@ -315,7 +318,11 @@ export function registerAIHandlers() {
 
       void (async () => {
         try {
-          const result = streamText({ model, prompt })
+          const result = streamText({
+            model,
+            prompt,
+            maxOutputTokens: params.action === 'scene.autocomplete' ? 10 : undefined,
+          })
           for await (const chunk of result.textStream) {
             if (event.sender.isDestroyed()) return
             event.sender.send('ai:scriptToolkitStreamChunk', {

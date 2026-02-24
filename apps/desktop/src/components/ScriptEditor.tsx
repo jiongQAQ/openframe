@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
+import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { AI_PROVIDERS, type AIConfig } from '@openframe/providers'
 import { useTranslation } from 'react-i18next'
@@ -26,12 +28,20 @@ import {
 
 type SceneAction =
   | 'scene.expand'
+  | 'scene.autocomplete'
   | 'scene.rewrite'
   | 'scene.dialogue-polish'
   | 'scene.pacing'
   | 'scene.continuity-check'
 
 type ExpandDraft = {
+  insertPos: number
+  fullText: string
+  displayText: string
+  status: 'streaming' | 'done'
+}
+
+type AutocompleteDraft = {
   insertPos: number
   fullText: string
   displayText: string
@@ -45,6 +55,88 @@ type MenuAnchor = {
 type TextModelOption = {
   key: string
   label: string
+}
+
+type AutocompleteGhostMeta = {
+  pos: number | null
+  text: string
+}
+
+function escapeHtml(raw: string): string {
+  return raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function textToBlockHtml(raw: string): string {
+  const normalized = raw.replace(/\r\n/g, '\n')
+  const blocks = normalized.split(/\n{2,}/)
+  if (blocks.length === 0) return ''
+  return blocks
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+}
+
+function createGhostDom(text: string): HTMLElement {
+  const root = document.createElement('span')
+  root.className = 'pointer-events-none text-base-content/35 align-baseline'
+
+  const normalized = text.replace(/\r\n/g, '\n')
+  const blocks = normalized.split(/\n{2,}/)
+
+  blocks.forEach((block, blockIndex) => {
+    const lineWrapper = document.createElement('span')
+    lineWrapper.className = 'block whitespace-pre-wrap break-words'
+
+    const lines = block.split('\n')
+    lines.forEach((line, lineIndex) => {
+      lineWrapper.append(document.createTextNode(line))
+      if (lineIndex < lines.length - 1) {
+        lineWrapper.append(document.createElement('br'))
+      }
+    })
+
+    root.append(lineWrapper)
+    if (blockIndex < blocks.length - 1) {
+      const gap = document.createElement('span')
+      gap.className = 'block h-3'
+      root.append(gap)
+    }
+  })
+
+  return root
+}
+
+const autocompleteGhostPluginKey = new PluginKey<AutocompleteGhostMeta>('autocompleteGhost')
+
+function createAutocompleteGhostPlugin() {
+  return new Plugin<AutocompleteGhostMeta>({
+    key: autocompleteGhostPluginKey,
+    state: {
+      init: () => ({ pos: null, text: '' }),
+      apply(tr: Transaction, prev: AutocompleteGhostMeta) {
+        const meta = tr.getMeta(autocompleteGhostPluginKey) as AutocompleteGhostMeta | undefined
+        if (meta) return meta
+        return prev
+      },
+    },
+    props: {
+      decorations(state: EditorState) {
+        const ghost = autocompleteGhostPluginKey.getState(state)
+        if (!ghost || ghost.pos == null || !ghost.text) return null
+        const pos = Math.max(0, Math.min(ghost.pos, state.doc.content.size))
+        const widget = Decoration.widget(
+          pos,
+          () => createGhostDom(ghost.text),
+          { side: 1, ignoreSelection: true },
+        )
+        return DecorationSet.create(state.doc, [widget])
+      },
+    },
+  })
 }
 
 function getTextModelOptions(config: AIConfig): TextModelOption[] {
@@ -71,11 +163,15 @@ export function ScriptEditor() {
   const [aiError, setAiError] = useState('')
   const [aiReport, setAiReport] = useState('')
   const [expandDraft, setExpandDraft] = useState<ExpandDraft | null>(null)
+  const [autocompleteDraft, setAutocompleteDraft] = useState<AutocompleteDraft | null>(null)
   const [contextMenu, setContextMenu] = useState<MenuAnchor | null>(null)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [modelOptions, setModelOptions] = useState<TextModelOption[]>([])
   const [selectedModelKey, setSelectedModelKey] = useState('')
   const activeStreamRequestIdRef = useRef<string | null>(null)
+  const activeStreamKindRef = useRef<'scene.expand' | 'scene.autocomplete' | null>(null)
+  const autocompleteTimerRef = useRef<number | null>(null)
+  const autocompleteArmedRef = useRef(false)
   const editorPaneRef = useRef<HTMLDivElement | null>(null)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
   const modelMenuRef = useRef<HTMLDivElement | null>(null)
@@ -89,12 +185,27 @@ export function ScriptEditor() {
           'h-full overflow-auto px-6 py-10 outline-none text-sm leading-7 max-w-3xl mx-auto',
       },
     },
+    onCreate: ({ editor: nextEditor }) => {
+      nextEditor.registerPlugin(createAutocompleteGhostPlugin())
+    },
     onUpdate: () => setEditorTick((v) => v + 1),
     onSelectionUpdate: () => setEditorTick((v) => v + 1),
   })
 
   function clearActiveStream() {
     activeStreamRequestIdRef.current = null
+    activeStreamKindRef.current = null
+  }
+
+  function clearAutocompleteTimer() {
+    if (autocompleteTimerRef.current) {
+      window.clearTimeout(autocompleteTimerRef.current)
+      autocompleteTimerRef.current = null
+    }
+  }
+
+  function clearAutocompleteDraft() {
+    setAutocompleteDraft(null)
   }
 
   const selectedModelLabel = useMemo(() => {
@@ -134,6 +245,26 @@ export function ScriptEditor() {
     }
   }, [expandDraft, editor])
 
+  const syncAutocompleteGhost = useCallback(
+    (next: AutocompleteGhostMeta) => {
+      if (!editor) return
+      editor.view.dispatch(editor.state.tr.setMeta(autocompleteGhostPluginKey, next))
+    },
+    [editor],
+  )
+
+  useEffect(() => {
+    if (!editor) return
+    if (!autocompleteDraft?.displayText) {
+      syncAutocompleteGhost({ pos: null, text: '' })
+      return
+    }
+    syncAutocompleteGhost({
+      pos: autocompleteDraft.insertPos,
+      text: autocompleteDraft.displayText,
+    })
+  }, [autocompleteDraft, editor, syncAutocompleteGhost])
+
   function handleSelectionFinished() {
     if (!editor || !editorPaneRef.current) return
     const { from, to, empty, head } = editor.state.selection
@@ -143,6 +274,43 @@ export function ScriptEditor() {
       return
     }
     setContextMenu({ pos: head })
+  }
+
+  function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const isTypingKey =
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      (event.key.length === 1 || event.key === 'Enter' || event.key === 'Backspace' || event.key === 'Delete')
+
+    if (isTypingKey) {
+      autocompleteArmedRef.current = true
+    }
+
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
+      event.preventDefault()
+      clearAutocompleteTimer()
+      void triggerAutocomplete(true)
+      return
+    }
+
+    if (event.key === 'Escape') {
+      if (autocompleteDraft) {
+        event.preventDefault()
+        discardAutocompleteDraft()
+        return
+      }
+      return
+    }
+
+    if (event.key !== 'Tab') return
+    if (!autocompleteDraft?.displayText) return
+
+    const { empty, head } = editor?.state.selection ?? { empty: false, head: -1 }
+    if (!empty || head !== autocompleteDraft.insertPos) return
+
+    event.preventDefault()
+    acceptAutocompleteDraft()
   }
 
   const contextMenuStyle = (() => {
@@ -186,6 +354,107 @@ export function ScriptEditor() {
     }
   }, [contextMenu, editor, editorTick])
 
+  const buildAutocompleteContext = useCallback((pos: number) => {
+    if (!editor) return ''
+    const doc = editor.state.doc
+    const beforeStart = Math.max(0, pos - 700)
+    const beforeText = doc.textBetween(beforeStart, pos, '\n').trim()
+    if (!beforeText || beforeText.length < 8) return ''
+
+    return [
+      'Continue this screenplay at the cursor.',
+      `Before cursor:\n${beforeText || '(empty)'}`,
+    ].join('\n\n')
+  }, [editor])
+
+  const triggerAutocomplete = useCallback(async (manual = false) => {
+    if (!editor) return
+    if (aiBusy || (expandDraft && expandDraft.status === 'streaming')) return
+
+    const { empty, head } = editor.state.selection
+    if (!empty) {
+      if (manual) setAiError(t('projectLibrary.aiAutocompleteNeedCursor'))
+      return
+    }
+
+    const context = buildAutocompleteContext(head)
+    if (!context.trim()) {
+      if (manual) setAiError(t('projectLibrary.aiEditorEmpty'))
+      return
+    }
+
+    setAiError('')
+    setContextMenu(null)
+    setModelMenuOpen(false)
+    clearActiveStream()
+    clearAutocompleteDraft()
+
+    try {
+      const start = await window.aiAPI.scriptToolkitStreamStart({
+        action: 'scene.autocomplete',
+        context,
+        modelKey: selectedModelKey || undefined,
+      })
+
+      if (!start.ok) {
+        if (manual) setAiError(start.error)
+        return
+      }
+
+      activeStreamRequestIdRef.current = start.requestId
+      activeStreamKindRef.current = 'scene.autocomplete'
+      setAutocompleteDraft({
+        insertPos: head,
+        fullText: '',
+        displayText: '',
+        status: 'streaming',
+      })
+    } catch {
+      if (manual) setAiError(t('projectLibrary.aiToolkitFailed'))
+    }
+  }, [aiBusy, buildAutocompleteContext, editor, expandDraft, selectedModelKey, t])
+
+  useEffect(() => {
+    if (!editor) return
+
+    const { empty, head } = editor.state.selection
+    if (!empty) {
+      clearAutocompleteTimer()
+      if (autocompleteDraft) {
+        clearActiveStream()
+        clearAutocompleteDraft()
+      }
+      return
+    }
+
+    if (autocompleteDraft && autocompleteDraft.insertPos !== head) {
+      clearActiveStream()
+      clearAutocompleteDraft()
+      clearAutocompleteTimer()
+      return
+    }
+
+    if (aiBusy || (expandDraft && expandDraft.status === 'streaming')) {
+      clearAutocompleteTimer()
+      return
+    }
+
+    if (!autocompleteArmedRef.current) return
+
+    if (activeStreamKindRef.current === 'scene.autocomplete') return
+    if (autocompleteDraft) return
+
+    clearAutocompleteTimer()
+    autocompleteTimerRef.current = window.setTimeout(() => {
+      autocompleteArmedRef.current = false
+      void triggerAutocomplete(false)
+    }, 450)
+
+    return () => {
+      clearAutocompleteTimer()
+    }
+  }, [editor, editorTick, aiBusy, expandDraft, autocompleteDraft, triggerAutocomplete])
+
   async function runToolkit(action: SceneAction) {
     if (!editor) return
     const { from, to } = editor.state.selection
@@ -207,6 +476,8 @@ export function ScriptEditor() {
     setAiReport('')
     setContextMenu(null)
     setModelMenuOpen(false)
+    clearAutocompleteTimer()
+    clearAutocompleteDraft()
     if (action !== 'scene.expand') setExpandDraft(null)
 
     try {
@@ -217,6 +488,7 @@ export function ScriptEditor() {
           return
         }
         activeStreamRequestIdRef.current = start.requestId
+        activeStreamKindRef.current = 'scene.expand'
         setExpandDraft({
           insertPos: to,
           fullText: '',
@@ -250,9 +522,27 @@ export function ScriptEditor() {
     setExpandDraft(null)
   }
 
+  function acceptAutocompleteDraft() {
+    if (!editor || !autocompleteDraft?.displayText) return
+    const { empty, head } = editor.state.selection
+    if (!empty || head !== autocompleteDraft.insertPos) return
+    const html = textToBlockHtml(autocompleteDraft.displayText)
+    if (!html) return
+    editor.chain().focus().insertContentAt(autocompleteDraft.insertPos, html).run()
+    clearActiveStream()
+    clearAutocompleteDraft()
+  }
+
   function discardExpandDraft() {
     clearActiveStream()
     setExpandDraft(null)
+  }
+
+  function discardAutocompleteDraft() {
+    if (activeStreamKindRef.current === 'scene.autocomplete') {
+      clearActiveStream()
+    }
+    clearAutocompleteDraft()
   }
 
   function stopAiToolkit() {
@@ -266,30 +556,54 @@ export function ScriptEditor() {
       if (!activeStreamRequestIdRef.current) return
       if (payload.requestId !== activeStreamRequestIdRef.current) return
 
+      const streamKind = activeStreamKindRef.current
+      if (!streamKind) return
+
       if (payload.error) {
         setAiError(payload.error)
         clearActiveStream()
-        setExpandDraft((prev) => (prev ? { ...prev, status: 'done' } : null))
+        if (streamKind === 'scene.expand') {
+          setExpandDraft((prev) => (prev ? { ...prev, status: 'done' } : null))
+        } else {
+          setAutocompleteDraft((prev) => (prev ? { ...prev, status: 'done' } : null))
+        }
         return
       }
 
       if (payload.done) {
         clearActiveStream()
-        setExpandDraft((prev) => (prev ? { ...prev, status: 'done' } : null))
+        if (streamKind === 'scene.expand') {
+          setExpandDraft((prev) => (prev ? { ...prev, status: 'done' } : null))
+        } else {
+          setAutocompleteDraft((prev) => (prev ? { ...prev, status: 'done' } : null))
+        }
         return
       }
 
       if (payload.chunk) {
-        setExpandDraft((prev) => {
-          if (!prev) return null
-          const nextText = prev.displayText + payload.chunk
-          return {
-            ...prev,
-            fullText: nextText,
-            displayText: nextText,
-            status: 'streaming',
-          }
-        })
+        if (streamKind === 'scene.expand') {
+          setExpandDraft((prev) => {
+            if (!prev) return null
+            const nextText = prev.displayText + payload.chunk
+            return {
+              ...prev,
+              fullText: nextText,
+              displayText: nextText,
+              status: 'streaming',
+            }
+          })
+        } else {
+          setAutocompleteDraft((prev) => {
+            if (!prev) return null
+            const nextText = prev.displayText + payload.chunk
+            return {
+              ...prev,
+              fullText: nextText,
+              displayText: nextText,
+              status: 'streaming',
+            }
+          })
+        }
       }
     })
 
@@ -309,6 +623,12 @@ export function ScriptEditor() {
     }
     window.addEventListener('mousedown', onGlobalMouseDown)
     return () => window.removeEventListener('mousedown', onGlobalMouseDown)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      clearAutocompleteTimer()
+    }
   }, [])
 
   return (
@@ -365,7 +685,7 @@ export function ScriptEditor() {
       {aiError ? <div className="px-3 py-2 text-xs text-error border-b border-base-300">{aiError}</div> : null}
       {aiReport ? <div className="px-3 py-2 text-xs text-base-content/80 border-b border-base-300 whitespace-pre-wrap">{aiReport}</div> : null}
 
-      <div ref={editorPaneRef} className="relative flex-1 min-h-0" onMouseUp={handleSelectionFinished}>
+      <div ref={editorPaneRef} className="relative flex-1 min-h-0" onMouseUp={handleSelectionFinished} onKeyDown={handleEditorKeyDown}>
         <EditorContent
           editor={editor}
           className="flex-1 min-h-0 h-full [&_.ProseMirror_h1]:text-2xl [&_.ProseMirror_h1]:font-semibold [&_.ProseMirror_h1]:mb-3 [&_.ProseMirror_h2]:text-xl [&_.ProseMirror_h2]:font-semibold [&_.ProseMirror_h2]:mb-2 [&_.ProseMirror_p]:mb-2 [&_.ProseMirror_ul]:list-disc [&_.ProseMirror_ul]:pl-6 [&_.ProseMirror_ol]:list-decimal [&_.ProseMirror_ol]:pl-6 [&_.ProseMirror_blockquote]:border-l-2 [&_.ProseMirror_blockquote]:border-base-300 [&_.ProseMirror_blockquote]:pl-3"

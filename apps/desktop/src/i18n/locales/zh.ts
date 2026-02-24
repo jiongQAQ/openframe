@@ -87,6 +87,8 @@ export default {
     aiStop: '停止',
     aiModel: '模型',
     aiModelEmpty: '暂无可用文本模型',
+    aiAutocompleteHint: 'Tab 接受，Esc 取消',
+    aiAutocompleteNeedCursor: '请先将光标放到需要补全的位置。',
   },
   settings: {
     general: '通用',

@@ -96,6 +96,7 @@ contextBridge.exposeInMainWorld('aiAPI', {
     params: {
       action:
         | 'scene.expand'
+        | 'scene.autocomplete'
         | 'scene.rewrite'
         | 'scene.dialogue-polish'
         | 'scene.pacing'
@@ -110,6 +111,7 @@ contextBridge.exposeInMainWorld('aiAPI', {
     params: {
       action:
         | 'scene.expand'
+        | 'scene.autocomplete'
         | 'scene.rewrite'
         | 'scene.dialogue-polish'
         | 'scene.pacing'

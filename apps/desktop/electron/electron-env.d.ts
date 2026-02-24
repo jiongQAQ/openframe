@@ -63,6 +63,7 @@ interface Window {
     scriptToolkit: (params: {
       action:
         | 'scene.expand'
+        | 'scene.autocomplete'
         | 'scene.rewrite'
         | 'scene.dialogue-polish'
         | 'scene.pacing'
@@ -74,6 +75,7 @@ interface Window {
     scriptToolkitStreamStart: (params: {
       action:
         | 'scene.expand'
+        | 'scene.autocomplete'
         | 'scene.rewrite'
         | 'scene.dialogue-polish'
         | 'scene.pacing'
