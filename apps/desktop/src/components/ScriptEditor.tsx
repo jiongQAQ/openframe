@@ -136,13 +136,13 @@ export function ScriptEditor() {
 
   function handleSelectionFinished() {
     if (!editor || !editorPaneRef.current) return
-    const { from, to, empty } = editor.state.selection
+    const { from, to, empty, head } = editor.state.selection
     const selectedText = editor.state.doc.textBetween(from, to, '\n').trim()
     if (empty || !selectedText) {
       setContextMenu(null)
       return
     }
-    setContextMenu({ pos: Math.max(from, to) })
+    setContextMenu({ pos: head })
   }
 
   const contextMenuStyle = (() => {
@@ -175,12 +175,12 @@ export function ScriptEditor() {
 
   useEffect(() => {
     if (!editor || !contextMenu) return
-    const { from, to, empty } = editor.state.selection
+    const { empty, head } = editor.state.selection
     if (empty) {
       setContextMenu(null)
       return
     }
-    const nextPos = Math.max(from, to)
+    const nextPos = head
     if (nextPos !== contextMenu.pos) {
       setContextMenu({ pos: nextPos })
     }
@@ -389,8 +389,12 @@ export function ScriptEditor() {
         {contextMenu && contextMenuStyle ? (
           <div
             ref={contextMenuRef}
-            className="absolute z-20 -translate-x-1/2 -translate-y-full"
-            style={{ left: `${contextMenuStyle.left}px`, top: `${contextMenuStyle.top}px` }}
+            className="absolute z-20"
+            style={{
+              left: `${contextMenuStyle.left}px`,
+              top: `${contextMenuStyle.top}px`,
+              transform: 'translate(-50%, calc(-100% - 10px))',
+            }}
             onMouseDown={(e) => e.preventDefault()}
           >
             <div className="rounded-2xl border border-base-300/90 bg-base-100/96 shadow-2xl backdrop-blur px-2 py-1.5">
