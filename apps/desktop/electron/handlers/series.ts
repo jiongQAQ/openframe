@@ -61,6 +61,7 @@ export function registerSeriesHandlers() {
   ipcMain.handle('series:delete', (_event, id: string) => {
     const raw = getRawDb()
     const row = raw.prepare('SELECT project_id FROM series WHERE id = ?').get(id) as { project_id: string } | undefined
+    raw.prepare('DELETE FROM scenes WHERE series_id = ?').run(id)
     raw.prepare('DELETE FROM series WHERE id = ?').run(id)
     if (row?.project_id) {
       syncProjectSeriesCount(row.project_id)

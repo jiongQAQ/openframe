@@ -55,6 +55,18 @@ type CharacterRow = {
   background: string
   created_at: number
 }
+type SceneRow = {
+  id: string
+  series_id: string
+  title: string
+  location: string
+  time: string
+  mood: string
+  description: string
+  shot_notes: string
+  thumbnail: string | null
+  created_at: number
+}
 type ChunkSearchResult = { chunk_id: number; document_id: string; content: string; chunk_index: number; distance: number }
 type DataInfo = { defaultDir: string; currentDir: string; pendingDir: string; dbSize: number; thumbsSize: number }
 
@@ -82,6 +94,15 @@ interface Window {
       character: { name: string; gender?: string; age?: string; personality?: string; appearance?: string; background?: string }
       modelKey?: string
     }) => Promise<{ ok: true; character: { name: string; gender: string; age: string; personality: string; appearance: string; background: string } } | { ok: false; error: string }>
+    extractScenesFromScript: (params: {
+      script: string
+      modelKey?: string
+    }) => Promise<{ ok: true; scenes: Array<{ title: string; location: string; time: string; mood: string; description: string; shot_notes: string }> } | { ok: false; error: string }>
+    enhanceSceneFromScript: (params: {
+      script: string
+      scene: { title: string; location?: string; time?: string; mood?: string; description?: string; shot_notes?: string }
+      modelKey?: string
+    }) => Promise<{ ok: true; scene: { title: string; location: string; time: string; mood: string; description: string; shot_notes: string } } | { ok: false; error: string }>
     scriptToolkit: (params: {
       action:
         | 'scene.expand'
@@ -145,6 +166,14 @@ interface Window {
     update: (character: CharacterRow) => Promise<void>
     delete: (id: string) => Promise<void>
     replaceByProject: (payload: { projectId: string; characters: CharacterRow[] }) => Promise<void>
+  }
+  scenesAPI: {
+    getAll: () => Promise<SceneRow[]>
+    getBySeries: (seriesId: string) => Promise<SceneRow[]>
+    insert: (scene: SceneRow) => Promise<void>
+    update: (scene: SceneRow) => Promise<void>
+    delete: (id: string) => Promise<void>
+    replaceBySeries: (payload: { seriesId: string; scenes: SceneRow[] }) => Promise<void>
   }
   windowAPI: {
     openStudio: (payload: { projectId: string; seriesId: string }) => Promise<void>

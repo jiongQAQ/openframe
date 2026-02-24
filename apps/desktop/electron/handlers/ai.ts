@@ -22,6 +22,14 @@ type CharacterExtractRow = {
   appearance: string
   background: string
 }
+type SceneExtractRow = {
+  title: string
+  location: string
+  time: string
+  mood: string
+  description: string
+  shot_notes: string
+}
 type ScriptToolkitAction =
   | 'scene.expand'
   | 'scene.autocomplete'
@@ -137,6 +145,24 @@ function parseCharacters(raw: string): CharacterExtractRow[] {
       }
     })
     .filter((row) => row.name)
+}
+
+function parseScenes(raw: string): SceneExtractRow[] {
+  const obj = extractJsonObject(raw)
+  const list = Array.isArray(obj?.scenes) ? obj.scenes : []
+  return list
+    .map((item) => {
+      const row = item as Record<string, unknown>
+      return {
+        title: toText(row.title).trim(),
+        location: toText(row.location).trim(),
+        time: toText(row.time).trim(),
+        mood: toText(row.mood).trim(),
+        description: toText(row.description).trim(),
+        shot_notes: toText(row.shot_notes).trim(),
+      }
+    })
+    .filter((row) => row.title)
 }
 
 function stripCliStyleParams(prompt: string): string {
@@ -473,6 +499,113 @@ export function registerAIHandlers() {
           return { ok: false, error: 'Failed to parse character from model response.' }
         }
         return { ok: true, character }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: msg.split('\n')[0].slice(0, 200) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ai:extractScenesFromScript',
+    async (
+      _event,
+      params: { script: string; modelKey?: string },
+    ): Promise<{ ok: true; scenes: SceneExtractRow[] } | { ok: false; error: string }> => {
+      const config = store.get('ai_config') as AIConfig
+      const selectedModel = params.modelKey
+        ? (() => {
+            const idx = params.modelKey!.indexOf(':')
+            if (idx === -1) return null
+            const providerId = params.modelKey!.slice(0, idx)
+            const modelId = params.modelKey!.slice(idx + 1)
+            return createProviderModelWithType(providerId, modelId, 'text', config)
+          })()
+        : null
+      const model = selectedModel && isLanguageModel(selectedModel) ? selectedModel : getDefaultTextModel(config)
+      if (!model || !isLanguageModel(model)) {
+        return { ok: false, error: 'No default text model configured.' }
+      }
+
+      const prompt = [
+        'You are a screenplay scene planner.',
+        'Extract key scenes from the script with concise production-ready info.',
+        'Return STRICT JSON only with shape:',
+        '{"scenes":[{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}]}',
+        'Do not include markdown code fences.',
+        'Keep each field concise and actionable.',
+        `Script:\n${params.script}`,
+      ].join('\n\n')
+
+      try {
+        const { text } = await generateText({ model, prompt })
+        const scenes = parseScenes(text)
+        return { ok: true, scenes }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: msg.split('\n')[0].slice(0, 200) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ai:enhanceSceneFromScript',
+    async (
+      _event,
+      params: {
+        script: string
+        scene: {
+          title: string
+          location?: string
+          time?: string
+          mood?: string
+          description?: string
+          shot_notes?: string
+        }
+        modelKey?: string
+      },
+    ): Promise<{ ok: true; scene: SceneExtractRow } | { ok: false; error: string }> => {
+      const config = store.get('ai_config') as AIConfig
+      const selectedModel = params.modelKey
+        ? (() => {
+            const idx = params.modelKey!.indexOf(':')
+            if (idx === -1) return null
+            const providerId = params.modelKey!.slice(0, idx)
+            const modelId = params.modelKey!.slice(idx + 1)
+            return createProviderModelWithType(providerId, modelId, 'text', config)
+          })()
+        : null
+      const model = selectedModel && isLanguageModel(selectedModel) ? selectedModel : getDefaultTextModel(config)
+      if (!model || !isLanguageModel(model)) {
+        return { ok: false, error: 'No default text model configured.' }
+      }
+
+      const prompt = [
+        'You are a screenplay scene planner.',
+        'Enhance one scene card based on script context.',
+        'Return STRICT JSON only with shape:',
+        '{"scene":{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}}',
+        'Do not include markdown code fences.',
+        `Current scene:\n${JSON.stringify(params.scene)}`,
+        `Script:\n${params.script}`,
+      ].join('\n\n')
+
+      try {
+        const { text } = await generateText({ model, prompt })
+        const parsed = extractJsonObject(text)
+        const raw = (parsed?.scene ?? {}) as Record<string, unknown>
+        const scene: SceneExtractRow = {
+          title: toText(raw.title).trim() || params.scene.title,
+          location: toText(raw.location).trim() || params.scene.location || '',
+          time: toText(raw.time).trim() || params.scene.time || '',
+          mood: toText(raw.mood).trim() || params.scene.mood || '',
+          description: toText(raw.description).trim() || params.scene.description || '',
+          shot_notes: toText(raw.shot_notes).trim() || params.scene.shot_notes || '',
+        }
+        if (!scene.title) {
+          return { ok: false, error: 'Failed to parse scene from model response.' }
+        }
+        return { ok: true, scene }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return { ok: false, error: msg.split('\n')[0].slice(0, 200) }

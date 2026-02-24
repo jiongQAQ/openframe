@@ -73,6 +73,18 @@ type CharacterRow = {
   background: string
   created_at: number
 }
+type SceneRow = {
+  id: string
+  series_id: string
+  title: string
+  location: string
+  time: string
+  mood: string
+  description: string
+  shot_notes: string
+  thumbnail: string | null
+  created_at: number
+}
 
 // --------- Expose Thumbnails API to the Renderer process ---------
 contextBridge.exposeInMainWorld('thumbnailsAPI', {
@@ -117,6 +129,18 @@ contextBridge.exposeInMainWorld('aiAPI', {
     },
   ): Promise<{ ok: true; character: { name: string; gender: string; age: string; personality: string; appearance: string; background: string } } | { ok: false; error: string }> =>
     ipcRenderer.invoke('ai:enhanceCharacterFromScript', params),
+  extractScenesFromScript: (
+    params: { script: string; modelKey?: string },
+  ): Promise<{ ok: true; scenes: Array<{ title: string; location: string; time: string; mood: string; description: string; shot_notes: string }> } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('ai:extractScenesFromScript', params),
+  enhanceSceneFromScript: (
+    params: {
+      script: string
+      scene: { title: string; location?: string; time?: string; mood?: string; description?: string; shot_notes?: string }
+      modelKey?: string
+    },
+  ): Promise<{ ok: true; scene: { title: string; location: string; time: string; mood: string; description: string; shot_notes: string } } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('ai:enhanceSceneFromScript', params),
   scriptToolkit: (
     params: {
       action:
@@ -218,6 +242,16 @@ contextBridge.exposeInMainWorld('charactersAPI', {
   delete: (id: string): Promise<void> => ipcRenderer.invoke('characters:delete', id),
   replaceByProject: (payload: { projectId: string; characters: CharacterRow[] }): Promise<void> =>
     ipcRenderer.invoke('characters:replaceByProject', payload),
+})
+
+contextBridge.exposeInMainWorld('scenesAPI', {
+  getAll: (): Promise<SceneRow[]> => ipcRenderer.invoke('scenes:getAll'),
+  getBySeries: (seriesId: string): Promise<SceneRow[]> => ipcRenderer.invoke('scenes:getBySeries', seriesId),
+  insert: (scene: SceneRow): Promise<void> => ipcRenderer.invoke('scenes:insert', scene),
+  update: (scene: SceneRow): Promise<void> => ipcRenderer.invoke('scenes:update', scene),
+  delete: (id: string): Promise<void> => ipcRenderer.invoke('scenes:delete', id),
+  replaceBySeries: (payload: { seriesId: string; scenes: SceneRow[] }): Promise<void> =>
+    ipcRenderer.invoke('scenes:replaceBySeries', payload),
 })
 
 contextBridge.exposeInMainWorld('windowAPI', {

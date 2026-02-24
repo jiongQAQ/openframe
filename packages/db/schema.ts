@@ -36,6 +36,19 @@ export const characters = sqliteTable('characters', {
   created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
 
+export const scenes = sqliteTable('scenes', {
+  id: text('id').primaryKey(),
+  series_id: text('series_id').notNull(),
+  title: text('title').notNull().$default(() => ''),
+  location: text('location').notNull().$default(() => ''),
+  time: text('time').notNull().$default(() => ''),
+  mood: text('mood').notNull().$default(() => ''),
+  description: text('description').notNull().$default(() => ''),
+  shot_notes: text('shot_notes').notNull().$default(() => ''),
+  thumbnail: text('thumbnail'),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
+
 export const genres = sqliteTable('genres', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),

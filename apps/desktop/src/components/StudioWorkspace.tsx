@@ -4,11 +4,25 @@ import { CheckCircle2 } from 'lucide-react'
 import { AI_PROVIDERS, type AIConfig } from '@openframe/providers'
 import { ScriptEditor } from './ScriptEditor'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
+import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
 import { seriesCollection } from '../db/series_collection'
 import type { Character } from '../db/characters_collection'
 
 type CharacterGender = Character['gender']
 type CharacterAge = Character['age']
+
+type Scene = {
+  id: string
+  series_id: string
+  title: string
+  location: string
+  time: string
+  mood: string
+  description: string
+  shot_notes: string
+  thumbnail: string | null
+  created_at: number
+}
 
 interface StudioWorkspaceProps {
   projectId: string
@@ -30,11 +44,17 @@ export function StudioWorkspace({
   scriptContent,
 }: StudioWorkspaceProps) {
   const { t } = useTranslation()
-  const [activeStep, setActiveStep] = useState<'script' | 'character'>('script')
+  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'storyboard'>('script')
   const [extractMode, setExtractMode] = useState<'merge' | 'replace' | null>(null)
+  const [sceneExtractMode, setSceneExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [characterBusyId, setCharacterBusyId] = useState<string | null>(null)
+  const [sceneBusyId, setSceneBusyId] = useState<string | null>(null)
   const [characterError, setCharacterError] = useState('')
   const [projectCharacters, setProjectCharacters] = useState<Character[]>([])
+  const [sceneError, setSceneError] = useState('')
+  const [seriesScenes, setSeriesScenes] = useState<Scene[]>([])
+  const [textModelOptions, setTextModelOptions] = useState<Array<{ key: string; label: string }>>([])
+  const [selectedTextModelKey, setSelectedTextModelKey] = useState('')
   const [imageModelOptions, setImageModelOptions] = useState<Array<{ key: string; label: string }>>([])
   const [selectedImageModelKey, setSelectedImageModelKey] = useState('')
 
@@ -55,31 +75,70 @@ export function StudioWorkspace({
   }, [projectId])
 
   useEffect(() => {
+    let active = true
+    if (!seriesId) {
+      setSeriesScenes([])
+      return
+    }
+    window.scenesAPI
+      .getBySeries(seriesId)
+      .then((rows) => {
+        if (active) setSeriesScenes(rows)
+      })
+      .catch(() => {
+        if (active) setSeriesScenes([])
+      })
+    return () => {
+      active = false
+    }
+  }, [seriesId])
+
+  useEffect(() => {
     window.aiAPI
       .getConfig()
       .then((cfg) => {
         const config = cfg as AIConfig
-        const options: Array<{ key: string; label: string }> = []
+        const textOptions: Array<{ key: string; label: string }> = []
+        const imageOptions: Array<{ key: string; label: string }> = []
         for (const provider of AI_PROVIDERS) {
           const providerCfg = config.providers[provider.id]
           if (!providerCfg?.enabled) continue
-          const builtin = provider.models.filter((m) => m.type === 'image')
-          const custom = (config.customModels[provider.id] ?? []).filter((m) => m.type === 'image')
-          for (const model of [...builtin, ...custom]) {
+          const builtinText = provider.models.filter((m) => m.type === 'text')
+          const customText = (config.customModels[provider.id] ?? []).filter((m) => m.type === 'text')
+          for (const model of [...builtinText, ...customText]) {
             const key = `${provider.id}:${model.id}`
             if (!config.enabledModels?.[key]) continue
             if (config.hiddenModels?.[key]) continue
-            options.push({ key, label: `${provider.name} / ${model.name || model.id}` })
+            textOptions.push({ key, label: `${provider.name} / ${model.name || model.id}` })
+          }
+
+          const builtinImage = provider.models.filter((m) => m.type === 'image')
+          const customImage = (config.customModels[provider.id] ?? []).filter((m) => m.type === 'image')
+          for (const model of [...builtinImage, ...customImage]) {
+            const key = `${provider.id}:${model.id}`
+            if (!config.enabledModels?.[key]) continue
+            if (config.hiddenModels?.[key]) continue
+            imageOptions.push({ key, label: `${provider.name} / ${model.name || model.id}` })
           }
         }
-        setImageModelOptions(options)
-        if (config.models?.image && options.some((item) => item.key === config.models.image)) {
+
+        setTextModelOptions(textOptions)
+        if (config.models?.text && textOptions.some((item) => item.key === config.models.text)) {
+          setSelectedTextModelKey(config.models.text)
+        } else {
+          setSelectedTextModelKey(textOptions[0]?.key ?? '')
+        }
+
+        setImageModelOptions(imageOptions)
+        if (config.models?.image && imageOptions.some((item) => item.key === config.models.image)) {
           setSelectedImageModelKey(config.models.image)
         } else {
-          setSelectedImageModelKey(options[0]?.key ?? '')
+          setSelectedImageModelKey(imageOptions[0]?.key ?? '')
         }
       })
       .catch(() => {
+        setTextModelOptions([])
+        setSelectedTextModelKey('')
         setImageModelOptions([])
         setSelectedImageModelKey('')
       })
@@ -98,6 +157,7 @@ export function StudioWorkspace({
   )
 
   const showCharacterPanel = activeStep === 'character'
+  const showScenePanel = activeStep === 'storyboard'
 
   function normalizeCharacterName(name: string): string {
     return name.trim().toLowerCase()
@@ -185,7 +245,10 @@ export function StudioWorkspace({
     setExtractMode(mode)
     setCharacterError('')
     try {
-      const result = await window.aiAPI.extractCharactersFromScript({ script: scriptContent })
+      const result = await window.aiAPI.extractCharactersFromScript({
+        script: scriptContent,
+        modelKey: selectedTextModelKey || undefined,
+      })
       if (!result.ok) {
         setCharacterError(result.error)
         return
@@ -307,6 +370,7 @@ export function StudioWorkspace({
           appearance: draft.appearance,
           background: draft.background,
         },
+        modelKey: selectedTextModelKey || undefined,
       })
 
       if (!result.ok) {
@@ -350,6 +414,7 @@ export function StudioWorkspace({
           appearance: character.appearance,
           background: character.background,
         },
+        modelKey: selectedTextModelKey || undefined,
       })
       if (!result.ok) {
         setCharacterError(result.error)
@@ -382,7 +447,10 @@ export function StudioWorkspace({
     setCharacterBusyId(id)
     setCharacterError('')
     try {
-      const result = await window.aiAPI.extractCharactersFromScript({ script: scriptContent })
+      const result = await window.aiAPI.extractCharactersFromScript({
+        script: scriptContent,
+        modelKey: selectedTextModelKey || undefined,
+      })
       if (!result.ok) {
         setCharacterError(result.error)
         return
@@ -493,6 +561,352 @@ export function StudioWorkspace({
     }
   }
 
+  function normalizeSceneTitle(value: string): string {
+    return value.trim().toLowerCase()
+  }
+
+  function mergeScenes(existing: Scene[], extracted: Scene[]): Scene[] {
+    const next = [...existing]
+    const titleIndex = new Map<string, number>()
+    next.forEach((item, index) => {
+      const key = normalizeSceneTitle(item.title)
+      if (key) titleIndex.set(key, index)
+    })
+
+    for (const item of extracted) {
+      const key = normalizeSceneTitle(item.title)
+      if (!key) continue
+      const hitIndex = titleIndex.get(key)
+      if (hitIndex == null) {
+        titleIndex.set(key, next.length)
+        next.push(item)
+        continue
+      }
+      const current = next[hitIndex]
+      next[hitIndex] = {
+        ...current,
+        location: current.location || item.location,
+        time: current.time || item.time,
+        mood: current.mood || item.mood,
+        description: current.description || item.description,
+        shot_notes: current.shot_notes || item.shot_notes,
+      }
+    }
+
+    return next
+  }
+
+  async function extractScenesFromScript(mode: 'merge' | 'replace') {
+    if (!seriesId) {
+      setSceneError(t('projectLibrary.emptySeries'))
+      return
+    }
+    if (!scriptContent.trim()) {
+      setSceneError(t('projectLibrary.aiEditorEmpty'))
+      return
+    }
+
+    setSceneExtractMode(mode)
+    setSceneError('')
+    try {
+      const result = await window.aiAPI.extractScenesFromScript({
+        script: scriptContent,
+        modelKey: selectedTextModelKey || undefined,
+      })
+      if (!result.ok) {
+        setSceneError(result.error)
+        return
+      }
+
+      const extractedRows: Scene[] = result.scenes.map((item, index) => ({
+        id: crypto.randomUUID(),
+        series_id: seriesId,
+        title: item.title,
+        location: item.location,
+        time: item.time,
+        mood: item.mood,
+        description: item.description,
+        shot_notes: item.shot_notes,
+        thumbnail: null,
+        created_at: Date.now() + index,
+      }))
+
+      const nextRows = mode === 'replace' ? extractedRows : mergeScenes(seriesScenes, extractedRows)
+      await window.scenesAPI.replaceBySeries({ seriesId, scenes: nextRows })
+      setSeriesScenes(nextRows)
+    } catch {
+      setSceneError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setSceneExtractMode(null)
+    }
+  }
+
+  async function handleExtractScenesFromScript() {
+    await extractScenesFromScript('merge')
+  }
+
+  async function handleRegenerateScenesFromScript() {
+    const shouldReplace = window.confirm(t('projectLibrary.sceneRegenerateConfirm'))
+    if (!shouldReplace) return
+    await extractScenesFromScript('replace')
+  }
+
+  async function persistScene(nextScene: Scene) {
+    await window.scenesAPI.update(nextScene)
+    setSeriesScenes((prev) => prev.map((item) => (item.id === nextScene.id ? nextScene : item)))
+  }
+
+  async function handleAddScene(draft: CreateSceneDraft) {
+    if (!seriesId) return
+    setSceneError('')
+    const row: Scene = {
+      id: crypto.randomUUID(),
+      series_id: seriesId,
+      title: draft.title,
+      location: draft.location,
+      time: draft.time,
+      mood: draft.mood,
+      description: draft.description,
+      shot_notes: draft.shot_notes,
+      thumbnail: draft.thumbnail,
+      created_at: Date.now(),
+    }
+    try {
+      await window.scenesAPI.insert(row)
+      setSeriesScenes((prev) => [...prev, row])
+    } catch {
+      setSceneError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleUpdateScene(id: string, draft: CreateSceneDraft) {
+    const current = seriesScenes.find((item) => item.id === id)
+    if (!current) return
+    setSceneError('')
+    try {
+      await persistScene({
+        ...current,
+        ...draft,
+      })
+    } catch {
+      setSceneError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleSmartGenerateScene(
+    draft: CreateSceneDraft,
+  ): Promise<{ ok: true; draft: CreateSceneDraft } | { ok: false; error: string }> {
+    if (!draft.title.trim()) {
+      return { ok: false, error: t('projectLibrary.sceneTitleRequired') }
+    }
+    const context = [
+      `Project category: ${projectCategory || 'unknown'}`,
+      `Project style: ${projectGenre || 'unknown'}`,
+      scriptContent ? `Script:\n${scriptContent}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+
+    try {
+      const result = await window.aiAPI.enhanceSceneFromScript({
+        script: context,
+        scene: {
+          title: draft.title,
+          location: draft.location,
+          time: draft.time,
+          mood: draft.mood,
+          description: draft.description,
+          shot_notes: draft.shot_notes,
+        },
+        modelKey: selectedTextModelKey || undefined,
+      })
+      if (!result.ok) return { ok: false, error: result.error }
+      return {
+        ok: true,
+        draft: {
+          ...draft,
+          ...result.scene,
+        },
+      }
+    } catch {
+      return { ok: false, error: t('projectLibrary.aiToolkitFailed') }
+    }
+  }
+
+  async function handleDeleteScene(id: string, title: string) {
+    setSceneError('')
+    const shouldDelete = window.confirm(t('projectLibrary.sceneDeleteConfirm', { name: title || t('projectLibrary.sceneCardUntitled') }))
+    if (!shouldDelete) return
+    try {
+      await window.scenesAPI.delete(id)
+      setSeriesScenes((prev) => prev.filter((item) => item.id !== id))
+    } catch {
+      setSceneError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleEnhanceScene(id: string) {
+    if (!scriptContent.trim()) {
+      setSceneError(t('projectLibrary.aiEditorEmpty'))
+      return
+    }
+    const scene = seriesScenes.find((item) => item.id === id)
+    if (!scene) return
+
+    setSceneBusyId(id)
+    setSceneError('')
+    try {
+      const result = await window.aiAPI.enhanceSceneFromScript({
+        script: scriptContent,
+        scene: {
+          title: scene.title,
+          location: scene.location,
+          time: scene.time,
+          mood: scene.mood,
+          description: scene.description,
+          shot_notes: scene.shot_notes,
+        },
+        modelKey: selectedTextModelKey || undefined,
+      })
+      if (!result.ok) {
+        setSceneError(result.error)
+        return
+      }
+      await persistScene({
+        ...scene,
+        ...result.scene,
+      })
+    } catch {
+      setSceneError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setSceneBusyId(null)
+    }
+  }
+
+  async function handleRefreshScene(id: string) {
+    if (!scriptContent.trim()) {
+      setSceneError(t('projectLibrary.aiEditorEmpty'))
+      return
+    }
+    const scene = seriesScenes.find((item) => item.id === id)
+    if (!scene) return
+
+    setSceneBusyId(id)
+    setSceneError('')
+    try {
+      const result = await window.aiAPI.extractScenesFromScript({
+        script: scriptContent,
+        modelKey: selectedTextModelKey || undefined,
+      })
+      if (!result.ok) {
+        setSceneError(result.error)
+        return
+      }
+
+      const key = normalizeSceneTitle(scene.title)
+      const match = result.scenes.find((item) => normalizeSceneTitle(item.title) === key)
+      if (!match) {
+        setSceneError(t('projectLibrary.sceneNotFoundInScript'))
+        return
+      }
+
+      await persistScene({
+        ...scene,
+        title: match.title || scene.title,
+        location: match.location,
+        time: match.time,
+        mood: match.mood,
+        description: match.description,
+        shot_notes: match.shot_notes,
+      })
+    } catch {
+      setSceneError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setSceneBusyId(null)
+    }
+  }
+
+  async function handleUploadSceneImage(id: string) {
+    const scene = seriesScenes.find((item) => item.id === id)
+    if (!scene) return
+
+    const file = await new Promise<File | null>((resolve) => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/*'
+      input.onchange = () => resolve(input.files?.[0] ?? null)
+      input.click()
+    })
+    if (!file) return
+
+    setSceneBusyId(id)
+    setSceneError('')
+    try {
+      const ext = (() => {
+        const fromName = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : ''
+        if (fromName) return fromName
+        if (file.type === 'image/jpeg') return 'jpg'
+        if (file.type === 'image/png') return 'png'
+        if (file.type === 'image/webp') return 'webp'
+        if (file.type === 'image/gif') return 'gif'
+        return 'png'
+      })()
+      const buf = new Uint8Array(await file.arrayBuffer())
+      const savedPath = await window.thumbnailsAPI.save(buf, ext)
+      await persistScene({
+        ...scene,
+        thumbnail: savedPath,
+      })
+    } catch {
+      setSceneError(t('projectLibrary.saveError'))
+    } finally {
+      setSceneBusyId(null)
+    }
+  }
+
+  async function handleGenerateSceneImage(id: string) {
+    const scene = seriesScenes.find((item) => item.id === id)
+    if (!scene) return
+
+    setSceneBusyId(id)
+    setSceneError('')
+    try {
+      const prompt = [
+        'Cinematic storyboard environment keyframe, high quality, no text watermark.',
+        'Environment-only scene. No people, no characters, no human silhouettes, no portraits.',
+        'Generate a complete scene composition: clear foreground, midground, background, lighting, atmosphere, and key props.',
+        'Use a wide establishing-shot framing with rich spatial depth and production-ready visual storytelling.',
+        `Project category: ${projectCategory || 'unknown'}`,
+        `Project style: ${projectGenre || 'unknown'}`,
+        `Scene title: ${scene.title || 'untitled'}`,
+        `Location: ${scene.location || 'unknown'}`,
+        `Time: ${scene.time || 'unknown'}`,
+        `Mood: ${scene.mood || 'unknown'}`,
+        `Scene description: ${scene.description || 'unknown'}`,
+        `Shot notes: ${scene.shot_notes || 'unknown'}`,
+      ].join('\n')
+
+      const result = await window.aiAPI.generateImage({ prompt, modelKey: selectedImageModelKey || undefined })
+      if (!result.ok) {
+        setSceneError(result.error)
+        return
+      }
+
+      const bytes = new Uint8Array(result.data)
+      const ext = extFromMediaType(result.mediaType)
+      const savedPath = await window.thumbnailsAPI.save(bytes, ext)
+
+      await persistScene({
+        ...scene,
+        thumbnail: savedPath,
+      })
+    } catch {
+      setSceneError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setSceneBusyId(null)
+    }
+  }
+
   return (
     <main className="h-full w-full overflow-hidden flex flex-col bg-linear-to-br from-base-200/40 via-base-100 to-base-200/30 text-base-content">
       <div className="sticky top-0 z-10 border-b border-base-300 bg-base-100/90 backdrop-blur">
@@ -508,12 +922,12 @@ export function StudioWorkspace({
                 key={step.key}
                 type="button"
                 onClick={() => {
-                  if (step.key === 'script' || step.key === 'character') setActiveStep(step.key)
+                  if (step.key === 'script' || step.key === 'character' || step.key === 'storyboard') setActiveStep(step.key)
                 }}
                 className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 border shrink-0 text-sm font-medium transition-colors ${
-                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character')
+                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'storyboard' && step.key === 'storyboard')
                     ? 'border-primary/40 bg-primary/10 text-primary'
-                    : idx <= 1
+                    : idx <= 2
                       ? 'border-base-300 hover:border-primary/30 text-base-content/70'
                       : 'border-base-300 text-base-content/45'
                 }`}
@@ -528,12 +942,16 @@ export function StudioWorkspace({
 
       <div className="p-5 flex-1 min-h-0">
         {characterError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{characterError}</div> : null}
+        {sceneError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{sceneError}</div> : null}
         {showCharacterPanel ? (
           <CharacterPanel
             characters={projectCharacters}
             extractingFromDraft={extractMode === 'merge'}
             extractingRegenerate={extractMode === 'replace'}
             characterBusyId={characterBusyId}
+            textModelOptions={textModelOptions}
+            selectedTextModelKey={selectedTextModelKey}
+            onTextModelChange={setSelectedTextModelKey}
             imageModelOptions={imageModelOptions}
             selectedImageModelKey={selectedImageModelKey}
             onImageModelChange={setSelectedImageModelKey}
@@ -547,6 +965,29 @@ export function StudioWorkspace({
             onRefreshCharacter={(id) => void handleRefreshCharacter(id)}
             onGenerateTurnaround={(id) => void handleGenerateTurnaround(id)}
             onUploadCharacter={(id) => void handleUploadCharacter(id)}
+          />
+        ) : showScenePanel ? (
+          <ScenePanel
+            scenes={seriesScenes}
+            extractingFromScript={sceneExtractMode === 'merge'}
+            extractingRegenerate={sceneExtractMode === 'replace'}
+            sceneBusyId={sceneBusyId}
+            textModelOptions={textModelOptions}
+            selectedTextModelKey={selectedTextModelKey}
+            onTextModelChange={setSelectedTextModelKey}
+            imageModelOptions={imageModelOptions}
+            selectedImageModelKey={selectedImageModelKey}
+            onImageModelChange={setSelectedImageModelKey}
+            onAddScene={(draft) => void handleAddScene(draft)}
+            onUpdateScene={(id, draft) => void handleUpdateScene(id, draft)}
+            onSmartGenerateScene={handleSmartGenerateScene}
+            onExtractFromScript={() => void handleExtractScenesFromScript()}
+            onRegenerateFromScript={() => void handleRegenerateScenesFromScript()}
+            onDeleteScene={(id, title) => void handleDeleteScene(id, title)}
+            onEnhanceScene={(id) => void handleEnhanceScene(id)}
+            onRefreshScene={(id) => void handleRefreshScene(id)}
+            onGenerateSceneImage={(id) => void handleGenerateSceneImage(id)}
+            onUploadSceneImage={(id) => void handleUploadSceneImage(id)}
           />
         ) : (
           <ScriptEditor
