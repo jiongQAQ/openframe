@@ -7,6 +7,7 @@ import { ScriptEditor } from './ScriptEditor'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
 import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
 import { ShotPanel, type ShotCard, type ShotDraft } from './ShotPanel'
+import { ProductionPanel } from './ProductionPanel'
 import { seriesCollection } from '../db/series_collection'
 import type { Character } from '../db/characters_collection'
 
@@ -58,7 +59,7 @@ export function StudioWorkspace({
   scriptContent,
 }: StudioWorkspaceProps) {
   const { t } = useTranslation()
-  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'storyboard' | 'shot'>('script')
+  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'storyboard' | 'shot' | 'production'>('script')
   const [extractMode, setExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [sceneExtractMode, setSceneExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [characterBusyId, setCharacterBusyId] = useState<string | null>(null)
@@ -82,6 +83,11 @@ export function StudioWorkspace({
   const [selectedTextModelKey, setSelectedTextModelKey] = useState('')
   const [imageModelOptions, setImageModelOptions] = useState<Array<{ key: string; label: string }>>([])
   const [selectedImageModelKey, setSelectedImageModelKey] = useState('')
+  const [videoModelOptions, setVideoModelOptions] = useState<Array<{ key: string; label: string }>>([])
+  const [selectedVideoModelKey, setSelectedVideoModelKey] = useState('')
+  const [productionFrames, setProductionFrames] = useState<Record<string, { first: string | null; last: string | null; video: string | null }>>({})
+  const [productionFrameBusyKey, setProductionFrameBusyKey] = useState<string | null>(null)
+  const [productionVideoBusyShotId, setProductionVideoBusyShotId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -144,6 +150,7 @@ export function StudioWorkspace({
         const config = cfg as AIConfig
         const textOptions: Array<{ key: string; label: string }> = []
         const imageOptions: Array<{ key: string; label: string }> = []
+        const videoOptions: Array<{ key: string; label: string }> = []
         for (const provider of AI_PROVIDERS) {
           const providerCfg = config.providers[provider.id]
           if (!providerCfg?.enabled) continue
@@ -164,6 +171,15 @@ export function StudioWorkspace({
             if (config.hiddenModels?.[key]) continue
             imageOptions.push({ key, label: `${provider.name} / ${model.name || model.id}` })
           }
+
+          const builtinVideo = provider.models.filter((m) => m.type === 'video')
+          const customVideo = (config.customModels[provider.id] ?? []).filter((m) => m.type === 'video')
+          for (const model of [...builtinVideo, ...customVideo]) {
+            const key = `${provider.id}:${model.id}`
+            if (!config.enabledModels?.[key]) continue
+            if (config.hiddenModels?.[key]) continue
+            videoOptions.push({ key, label: `${provider.name} / ${model.name || model.id}` })
+          }
         }
 
         setTextModelOptions(textOptions)
@@ -180,6 +196,13 @@ export function StudioWorkspace({
           setSelectedImageModelKey(imageOptions[0]?.key ?? '')
         }
 
+        setVideoModelOptions(videoOptions)
+        if (config.models?.video && videoOptions.some((item) => item.key === config.models.video)) {
+          setSelectedVideoModelKey(config.models.video)
+        } else {
+          setSelectedVideoModelKey(videoOptions[0]?.key ?? '')
+        }
+
         const imageConcurrency = Math.max(1, Math.min(20, config.concurrency?.image ?? 5))
         mediaQueueRef.current.concurrency = imageConcurrency
       })
@@ -188,6 +211,8 @@ export function StudioWorkspace({
         setSelectedTextModelKey('')
         setImageModelOptions([])
         setSelectedImageModelKey('')
+        setVideoModelOptions([])
+        setSelectedVideoModelKey('')
         mediaQueueRef.current.concurrency = 5
       })
   }, [])
@@ -207,6 +232,7 @@ export function StudioWorkspace({
   const showCharacterPanel = activeStep === 'character'
   const showScenePanel = activeStep === 'storyboard'
   const showShotPanel = activeStep === 'shot'
+  const showProductionPanel = activeStep === 'production'
 
   function normalizeCharacterName(name: string): string {
     return name.trim().toLowerCase()
@@ -1118,6 +1144,93 @@ export function StudioWorkspace({
     }
   }
 
+  async function generateProductionFrame(shotId: string, kind: 'first' | 'last') {
+    const shot = seriesShots.find((item) => item.id === shotId)
+    if (!shot) return
+
+    const busyKey = `${shotId}:${kind}`
+    setProductionFrameBusyKey(busyKey)
+    setShotError('')
+    try {
+      const sceneMap = new Map(seriesScenes.map((scene) => [scene.id, scene]))
+      const characterMap = new Map(projectCharacters.map((character) => [character.id, character]))
+      const scene = sceneMap.get(shot.scene_id)
+      const characterNames = shot.character_ids
+        .map((cid) => characterMap.get(cid)?.name)
+        .filter(Boolean)
+        .join(', ')
+
+      const referenceImages: string[] = []
+      const middleRef = await readThumbnailAsBase64(shot.thumbnail)
+      if (middleRef) referenceImages.push(middleRef)
+      const sceneRef = await readThumbnailAsBase64(scene?.thumbnail ?? null)
+      if (sceneRef) referenceImages.push(sceneRef)
+      for (const cid of shot.character_ids.slice(0, 3)) {
+        const cref = await readThumbnailAsBase64(characterMap.get(cid)?.thumbnail ?? null)
+        if (cref) referenceImages.push(cref)
+      }
+
+      if (!middleRef) {
+        setShotError(t('projectLibrary.productionNeedMiddleFrame'))
+        return
+      }
+
+      const prompt = [
+        `Cinematic storyboard ${kind === 'first' ? 'starting' : 'ending'} keyframe, production-ready, high detail, no watermark text.`,
+        `Use the first reference image as the MIDDLE frame of the same shot. Generate a ${kind === 'first' ? 'preceding' : 'following'} frame with strict continuity.`,
+        'Keep identity, costume, location, composition logic, and lighting continuity.',
+        `Project category: ${projectCategory || 'unknown'}`,
+        `Project style: ${projectGenre || 'unknown'}`,
+        `Shot title: ${shot.title || 'untitled shot'}`,
+        `Shot size: ${shot.shot_size || 'unknown'}`,
+        `Camera angle: ${shot.camera_angle || 'unknown'}`,
+        `Camera movement: ${shot.camera_move || 'unknown'}`,
+        `Action: ${shot.action || 'unknown'}`,
+        `Scene: ${scene?.title || 'unknown'}`,
+        `Location: ${scene?.location || 'unknown'}`,
+        `Time: ${scene?.time || 'unknown'}`,
+        `Mood: ${scene?.mood || 'unknown'}`,
+        characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
+      ].join('\n')
+
+      const result = await window.aiAPI.generateImage({
+        prompt: referenceImages.length > 0 ? { text: prompt, images: referenceImages } : prompt,
+        modelKey: selectedImageModelKey || undefined,
+        options: { ratio: projectRatio },
+      })
+      if (!result.ok) {
+        setShotError(result.error)
+        return
+      }
+
+      const bytes = new Uint8Array(result.data)
+      const ext = extFromMediaType(result.mediaType)
+      const savedPath = await window.thumbnailsAPI.save(bytes, ext)
+      setProductionFrames((prev) => ({
+        ...prev,
+        [shotId]: {
+          first: kind === 'first' ? savedPath : prev[shotId]?.first ?? null,
+          last: kind === 'last' ? savedPath : prev[shotId]?.last ?? null,
+          video: prev[shotId]?.video ?? null,
+        },
+      }))
+    } catch {
+      setShotError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setProductionFrameBusyKey(null)
+    }
+  }
+
+  async function generateProductionVideo(shotId: string, _params: { durationSec: number; ratio: string; mode: 'single' | 'first_last' }) {
+    setProductionVideoBusyShotId(shotId)
+    setShotError('')
+    try {
+      setShotError(t('projectLibrary.productionVideoNotImplemented'))
+    } finally {
+      setProductionVideoBusyShotId(null)
+    }
+  }
+
   function renderTaskStatusIcon(status: StudioTaskStatus) {
     if (status === 'queued') return <Clock3 size={12} className="text-base-content/55" />
     if (status === 'running') return <Loader2 size={12} className="text-info animate-spin" />
@@ -1188,12 +1301,12 @@ export function StudioWorkspace({
                 key={step.key}
                 type="button"
                 onClick={() => {
-                  if (step.key === 'script' || step.key === 'character' || step.key === 'storyboard' || step.key === 'shot') setActiveStep(step.key)
+                  if (step.key === 'script' || step.key === 'character' || step.key === 'storyboard' || step.key === 'shot' || step.key === 'production') setActiveStep(step.key)
                 }}
                 className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 border shrink-0 text-sm font-medium transition-colors ${
-                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'storyboard' && step.key === 'storyboard') || (activeStep === 'shot' && step.key === 'shot')
+                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'storyboard' && step.key === 'storyboard') || (activeStep === 'shot' && step.key === 'shot') || (activeStep === 'production' && step.key === 'production')
                     ? 'border-primary/40 bg-primary/10 text-primary'
-                    : idx <= 3
+                    : idx <= 4
                       ? 'border-base-300 hover:border-primary/30 text-base-content/70'
                       : 'border-base-300 text-base-content/45'
                 }`}
@@ -1256,6 +1369,21 @@ export function StudioWorkspace({
             onGenerateFromScript={() => void generateShotsFromScript()}
             onGenerateAllImages={() => void generateAllShotImages()}
             onGenerateSingleImage={(id) => void generateSingleShotImage(id)}
+          />
+        ) : showProductionPanel ? (
+          <ProductionPanel
+            shots={seriesShots}
+            scenes={seriesScenes.map((scene) => ({ id: scene.id, title: scene.title }))}
+            characters={projectCharacters.map((character) => ({ id: character.id, name: character.name }))}
+            projectRatio={projectRatio}
+            videoModelOptions={videoModelOptions}
+            selectedVideoModelKey={selectedVideoModelKey}
+            onVideoModelChange={setSelectedVideoModelKey}
+            framesByShot={productionFrames}
+            frameBusyKey={productionFrameBusyKey}
+            videoBusyShotId={productionVideoBusyShotId}
+            onGenerateFrame={(shotId, kind) => void generateProductionFrame(shotId, kind)}
+            onGenerateVideo={(shotId, params) => void generateProductionVideo(shotId, params)}
           />
         ) : (
           <ScriptEditor
