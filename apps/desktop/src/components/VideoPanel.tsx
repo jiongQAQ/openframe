@@ -8,7 +8,7 @@ type CharacterOption = { id: string; name: string }
 type FramePair = { first: string | null; last: string | null; video: string | null }
 type VideoFrameMode = 'single' | 'first_last'
 
-interface ProductionPanelProps {
+interface VideoPanelProps {
   shots: ShotCard[]
   scenes: SceneOption[]
   characters: CharacterOption[]
@@ -29,7 +29,7 @@ function getThumbSrc(value: string | null): string | null {
   return `openframe-thumb://local?path=${encodeURIComponent(value)}`
 }
 
-export function ProductionPanel({
+export function VideoPanel({
   shots,
   scenes,
   characters,
@@ -42,7 +42,7 @@ export function ProductionPanel({
   videoBusyShotId,
   onGenerateFrame,
   onGenerateVideo,
-}: ProductionPanelProps) {
+}: VideoPanelProps) {
   const { t } = useTranslation()
   const [selectedShotId, setSelectedShotId] = useState<string>('')
   const [durationSec, setDurationSec] = useState(4)

@@ -7,7 +7,7 @@ import { ScriptEditor } from './ScriptEditor'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
 import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
 import { ShotPanel, type ShotCard, type ShotDraft } from './ShotPanel'
-import { ProductionPanel } from './ProductionPanel'
+import { VideoPanel } from './VideoPanel'
 import { seriesCollection } from '../db/series_collection'
 import type { Character } from '../db/characters_collection'
 
@@ -247,7 +247,7 @@ export function StudioWorkspace({
   const showCharacterPanel = activeStep === 'character'
   const showScenePanel = activeStep === 'storyboard'
   const showShotPanel = activeStep === 'shot'
-  const showProductionPanel = activeStep === 'production'
+  const showVideoPanel = activeStep === 'production'
 
   function normalizeCharacterName(name: string): string {
     return name.trim().toLowerCase()
@@ -1535,8 +1535,8 @@ export function StudioWorkspace({
             onGenerateAllImages={() => void generateAllShotImages()}
             onGenerateSingleImage={(id) => queueGenerateSingleShotImage(id)}
           />
-        ) : showProductionPanel ? (
-          <ProductionPanel
+        ) : showVideoPanel ? (
+          <VideoPanel
             shots={seriesShots}
             scenes={seriesScenes.map((scene) => ({ id: scene.id, title: scene.title }))}
             characters={projectCharacters.map((character) => ({ id: character.id, name: character.name }))}
