@@ -179,7 +179,7 @@ export function ProductionPanel({
 
       <article className="rounded-xl border border-base-300 bg-base-100 p-3 flex flex-col gap-3 min-h-0">
         <h3 className="text-sm font-semibold">{t('projectLibrary.productionVideoWindow')}</h3>
-        <div className="flex min-h-0 rounded-lg border border-base-300 bg-base-200/70 flex items-center justify-center p-2 overflow-hidden">
+        <div className="min-h-0 rounded-lg border border-base-300 bg-base-200/70 flex items-center justify-center p-2 overflow-hidden">
           <div className={`h-auto max-h-full max-w-full w-full overflow-hidden rounded-md bg-black ${videoViewportClass}`}>
             {getThumbSrc(pair.video) ? (
               <video src={getThumbSrc(pair.video)!} controls className="h-full w-full object-contain" />
