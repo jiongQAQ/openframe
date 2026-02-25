@@ -252,13 +252,13 @@ interface Window {
       orderedShotIds: string[]
       clips: Array<{ shotId: string; path: string; title?: string; trimStartSec?: number; trimEndSec?: number }>
       projectName?: string
-    }) => Promise<{ outputPath: string }>
+    }) => Promise<{ outputPath?: string; canceled?: boolean }>
     exportEdl: (payload: {
       orderedShotIds: string[]
       clips: Array<{ shotId: string; path: string; title?: string; trimStartSec?: number; trimEndSec?: number }>
       projectName?: string
       fps?: number
-    }) => Promise<{ outputPath: string }>
+    }) => Promise<{ outputPath?: string; canceled?: boolean }>
   }
   categoriesAPI: {
     getAll: () => Promise<CategoryRow[]>

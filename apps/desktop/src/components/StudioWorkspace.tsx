@@ -1654,12 +1654,16 @@ export function StudioWorkspace({
 
     enqueueTask(t('projectLibrary.productionExportFcpxml'), async () => {
       try {
-        await window.mediaAPI.exportFcpxml({
+        const result = await window.mediaAPI.exportFcpxml({
           ratio: projectRatio,
           orderedShotIds: clips.map((clip) => clip.shotId),
           clips,
           projectName: `${projectName} - ${seriesTitle}`,
         })
+        if (result.canceled) return
+        if (!result.outputPath) {
+          throw new Error(t('projectLibrary.taskFailed'))
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : t('projectLibrary.taskFailed')
         setShotError(message)
@@ -1685,12 +1689,16 @@ export function StudioWorkspace({
 
     enqueueTask(t('projectLibrary.productionExportEdl'), async () => {
       try {
-        await window.mediaAPI.exportEdl({
+        const result = await window.mediaAPI.exportEdl({
           orderedShotIds: clips.map((clip) => clip.shotId),
           clips,
           projectName: `${projectName} - ${seriesTitle}`,
           fps: 30,
         })
+        if (result.canceled) return
+        if (!result.outputPath) {
+          throw new Error(t('projectLibrary.taskFailed'))
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : t('projectLibrary.taskFailed')
         setShotError(message)

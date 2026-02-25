@@ -339,14 +339,14 @@ contextBridge.exposeInMainWorld('mediaAPI', {
     orderedShotIds: string[]
     clips: Array<{ shotId: string; path: string; title?: string; trimStartSec?: number; trimEndSec?: number }>
     projectName?: string
-  }): Promise<{ outputPath: string }> =>
+  }): Promise<{ outputPath?: string; canceled?: boolean }> =>
     ipcRenderer.invoke('media:exportFcpxml', payload),
   exportEdl: (payload: {
     orderedShotIds: string[]
     clips: Array<{ shotId: string; path: string; title?: string; trimStartSec?: number; trimEndSec?: number }>
     projectName?: string
     fps?: number
-  }): Promise<{ outputPath: string }> =>
+  }): Promise<{ outputPath?: string; canceled?: boolean }> =>
     ipcRenderer.invoke('media:exportEdl', payload),
 })
 

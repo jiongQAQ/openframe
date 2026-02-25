@@ -52,6 +52,10 @@ type ExportEdlResult = {
   outputPath: string
 }
 
+type ExportTimelineIpcResult =
+  | { outputPath: string }
+  | { canceled: true }
+
 function isSubPath(targetPath: string, parentPath: string): boolean {
   const resolvedTarget = path.resolve(targetPath)
   const resolvedParent = path.resolve(parentPath) + path.sep
@@ -139,9 +143,11 @@ function framesToTimecode(totalFrames: number, fps: number): string {
   return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}:${pad2(frames)}`
 }
 
-async function exportEdl(payload: ExportEdlPayload): Promise<ExportEdlResult> {
+async function exportEdl(payload: ExportEdlPayload, outputDir?: string): Promise<ExportEdlResult> {
   const videosDir = path.resolve(path.join(getDataDir(), 'videos'))
-  const exportsDir = path.join(videosDir, 'exports')
+  const exportsDir = outputDir
+    ? path.resolve(outputDir)
+    : path.join(videosDir, 'exports')
   await fs.mkdir(exportsDir, { recursive: true })
 
   const clipByShotId = new Map(payload.clips.map((clip) => [clip.shotId, clip]))
@@ -200,9 +206,11 @@ async function exportEdl(payload: ExportEdlPayload): Promise<ExportEdlResult> {
   return { outputPath }
 }
 
-async function exportFcpxml(payload: ExportFcpxmlPayload): Promise<ExportFcpxmlResult> {
+async function exportFcpxml(payload: ExportFcpxmlPayload, outputDir?: string): Promise<ExportFcpxmlResult> {
   const videosDir = path.resolve(path.join(getDataDir(), 'videos'))
-  const exportsDir = path.join(videosDir, 'exports')
+  const exportsDir = outputDir
+    ? path.resolve(outputDir)
+    : path.join(videosDir, 'exports')
   await fs.mkdir(exportsDir, { recursive: true })
 
   const clipByShotId = new Map(payload.clips.map((clip) => [clip.shotId, clip]))
@@ -446,14 +454,44 @@ export function registerMediaHandlers() {
   })
 
   ipcMain.handle('media:exportFcpxml', async (_event, payload: ExportFcpxmlPayload) => {
-    const result = await exportFcpxml(payload)
+    const defaultExportDir = app.getPath('downloads')
+    await fs.mkdir(defaultExportDir, { recursive: true })
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    const options: OpenDialogOptions = {
+      title: 'Select export folder',
+      defaultPath: defaultExportDir,
+      properties: ['openDirectory', 'createDirectory'],
+    }
+    const folderPick = focusedWindow
+      ? await dialog.showOpenDialog(focusedWindow, options)
+      : await dialog.showOpenDialog(options)
+    if (folderPick.canceled || folderPick.filePaths.length === 0) {
+      return { canceled: true } as ExportTimelineIpcResult
+    }
+
+    const result = await exportFcpxml(payload, folderPick.filePaths[0])
     await shell.openPath(path.dirname(result.outputPath))
-    return result
+    return result as ExportTimelineIpcResult
   })
 
   ipcMain.handle('media:exportEdl', async (_event, payload: ExportEdlPayload) => {
-    const result = await exportEdl(payload)
+    const defaultExportDir = app.getPath('downloads')
+    await fs.mkdir(defaultExportDir, { recursive: true })
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    const options: OpenDialogOptions = {
+      title: 'Select export folder',
+      defaultPath: defaultExportDir,
+      properties: ['openDirectory', 'createDirectory'],
+    }
+    const folderPick = focusedWindow
+      ? await dialog.showOpenDialog(focusedWindow, options)
+      : await dialog.showOpenDialog(options)
+    if (folderPick.canceled || folderPick.filePaths.length === 0) {
+      return { canceled: true } as ExportTimelineIpcResult
+    }
+
+    const result = await exportEdl(payload, folderPick.filePaths[0])
     await shell.openPath(path.dirname(result.outputPath))
-    return result
+    return result as ExportTimelineIpcResult
   })
 }
