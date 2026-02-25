@@ -38,6 +38,8 @@ export type ScriptToolkitAction =
   | 'scene.dialogue-polish'
   | 'scene.pacing'
   | 'scene.continuity-check'
+  | 'script.from-idea'
+  | 'script.from-novel'
 
 const CHARACTER_AGE_BUCKETS = ['child', 'youth', 'young_adult', 'adult', 'middle_aged', 'elder'] as const
 const CHARACTER_AGE_BUCKETS_ZH = ['幼年', '少年', '青年', '成年', '中年', '老年'] as const
@@ -223,6 +225,10 @@ export function getScriptToolkitPrompt(action: ScriptToolkitAction, context: str
       'Diagnose pacing issues in this scene. Identify dragging lines, low-information paragraphs, and rhythm breaks. Return concise bullet points with actionable fixes.',
     'scene.continuity-check':
       'Check scene continuity: character states, time/space consistency, and prop/object continuity. Return concise bullet points with found issues and suggested fixes.',
+    'script.from-idea':
+      'Turn the idea into a complete screenplay segment with clear scene progression, visual actions, and natural dialogue. Output plain screenplay text only.',
+    'script.from-novel':
+      'Adapt the novel excerpt into a screenplay segment, preserving key plot beats and emotional intent while making it performable on screen. Output plain screenplay text only.',
   }
 
   return [

@@ -18,7 +18,9 @@ import {
   Quote,
   RefreshCcw,
   Redo2,
+  ScrollText,
   ShieldCheck,
+  Sparkles,
   Square,
   Undo2,
   Wand2,
@@ -32,6 +34,8 @@ type SceneAction =
   | 'scene.dialogue-polish'
   | 'scene.pacing'
   | 'scene.continuity-check'
+
+type ScriptGenerateMode = 'script.from-idea' | 'script.from-novel'
 
 type ExpandDraft = {
   insertPos: number
@@ -134,6 +138,8 @@ export function ScriptEditor({ content, onContentChange, selectedTextModelKey }:
   const [expandDraft, setExpandDraft] = useState<ExpandDraft | null>(null)
   const [autocompleteDraft, setAutocompleteDraft] = useState<AutocompleteDraft | null>(null)
   const [contextMenu, setContextMenu] = useState<MenuAnchor | null>(null)
+  const [scriptGenerateMode, setScriptGenerateMode] = useState<ScriptGenerateMode | null>(null)
+  const [scriptGenerateInput, setScriptGenerateInput] = useState('')
   const activeStreamRequestIdRef = useRef<string | null>(null)
   const activeStreamKindRef = useRef<'scene.expand' | 'scene.autocomplete' | null>(null)
   const autocompleteTimerRef = useRef<number | null>(null)
@@ -157,10 +163,10 @@ export function ScriptEditor({ content, onContentChange, selectedTextModelKey }:
           'h-full overflow-auto px-6 py-10 outline-none text-sm leading-7 max-w-3xl mx-auto',
       },
     },
-    onCreate: ({ editor: nextEditor }) => {
-      nextEditor.registerPlugin(createAutocompleteGhostPlugin())
+    onCreate: ({ editor: nextEditor }: { editor: ReturnType<typeof useEditor> }) => {
+      nextEditor?.registerPlugin(createAutocompleteGhostPlugin())
     },
-    onUpdate: ({ editor: nextEditor }) => {
+    onUpdate: ({ editor: nextEditor }: { editor: ReturnType<typeof useEditor> }) => {
       setEditorTick((v) => v + 1)
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current)
@@ -366,7 +372,7 @@ export function ScriptEditor({ content, onContentChange, selectedTextModelKey }:
       })
 
       if (!start.ok) {
-        if (manual) setAiError(start.error)
+        if (manual || /No default text model configured/i.test(start.error)) setAiError(start.error)
         return
       }
 
@@ -476,6 +482,68 @@ export function ScriptEditor({ content, onContentChange, selectedTextModelKey }:
           editor.chain().focus().insertContentAt({ from, to }, result.text).run()
         }
       }
+    } catch {
+      setAiError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
+  function openGenerateDialog(mode: ScriptGenerateMode) {
+    if (aiBusy || (expandDraft && expandDraft.status === 'streaming')) return
+    setAiError('')
+    setAiReport('')
+    setContextMenu(null)
+    setScriptGenerateInput('')
+    setScriptGenerateMode(mode)
+  }
+
+  function closeGenerateDialog() {
+    if (aiBusy) return
+    setScriptGenerateMode(null)
+    setScriptGenerateInput('')
+  }
+
+  async function submitGenerateScript() {
+    if (!editor || !scriptGenerateMode) return
+    const input = scriptGenerateInput.trim()
+    if (!input) {
+      setAiError(t('projectLibrary.aiGenerateInputRequired'))
+      return
+    }
+
+    setAiBusy(true)
+    setAiError('')
+    setAiReport('')
+    setContextMenu(null)
+    clearAutocompleteTimer()
+    clearAutocompleteDraft()
+    setExpandDraft(null)
+    clearActiveStream()
+
+    try {
+      const result = await window.aiAPI.scriptToolkit({
+        action: scriptGenerateMode,
+        context: input,
+        modelKey: selectedTextModelKey || undefined,
+      })
+      if (!result.ok) {
+        setAiError(result.error)
+        return
+      }
+      const generatedText = result.text.trim()
+      if (!generatedText) {
+        setAiError(t('projectLibrary.aiToolkitFailed'))
+        return
+      }
+      const { from, to } = editor.state.selection
+      editor
+        .chain()
+        .focus()
+        .insertContentAt({ from, to }, generatedText, { contentType: 'markdown' })
+        .run()
+      setScriptGenerateMode(null)
+      setScriptGenerateInput('')
     } catch {
       setAiError(t('projectLibrary.aiToolkitFailed'))
     } finally {
@@ -617,10 +685,84 @@ export function ScriptEditor({ content, onContentChange, selectedTextModelKey }:
         <div className="w-px h-5 bg-base-300 mx-1" />
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().chain().focus().undo().run()} aria-label="Undo"><Undo2 size={16} /></button>
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().chain().focus().redo().run()} aria-label="Redo"><Redo2 size={16} /></button>
+        <div className="w-px h-5 bg-base-300 mx-1" />
+        <button
+          type="button"
+          className="btn btn-sm btn-outline gap-1.5"
+          onClick={() => {
+            clearAutocompleteTimer()
+            void triggerAutocomplete(true)
+          }}
+          disabled={aiBusy || Boolean(expandDraft && expandDraft.status === 'streaming')}
+        >
+          <Wand2 size={14} />
+          {t('projectLibrary.aiAutocomplete')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline gap-1.5"
+          onClick={() => openGenerateDialog('script.from-idea')}
+          disabled={aiBusy || Boolean(expandDraft && expandDraft.status === 'streaming')}
+        >
+          <Sparkles size={14} />
+          {t('projectLibrary.aiGenerateFromIdea')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline gap-1.5"
+          onClick={() => openGenerateDialog('script.from-novel')}
+          disabled={aiBusy || Boolean(expandDraft && expandDraft.status === 'streaming')}
+        >
+          <ScrollText size={14} />
+          {t('projectLibrary.aiGenerateFromNovel')}
+        </button>
       </div>
 
       {aiError ? <div className="px-3 py-2 text-xs text-error border-b border-base-300">{aiError}</div> : null}
       {aiReport ? <div className="px-3 py-2 text-xs text-base-content/80 border-b border-base-300 whitespace-pre-wrap">{aiReport}</div> : null}
+
+      {scriptGenerateMode ? (
+        <dialog className="modal modal-open">
+          <div className="modal-box max-w-2xl">
+            <h3 className="font-semibold text-base">
+              {scriptGenerateMode === 'script.from-idea'
+                ? t('projectLibrary.aiGenerateFromIdeaTitle')
+                : t('projectLibrary.aiGenerateFromNovelTitle')}
+            </h3>
+            <p className="text-sm text-base-content/60 mt-1">
+              {scriptGenerateMode === 'script.from-idea'
+                ? t('projectLibrary.aiGenerateFromIdeaHint')
+                : t('projectLibrary.aiGenerateFromNovelHint')}
+            </p>
+            <textarea
+              className="textarea textarea-bordered w-full h-52 mt-3"
+              value={scriptGenerateInput}
+              onChange={(event) => setScriptGenerateInput(event.target.value)}
+              placeholder={
+                scriptGenerateMode === 'script.from-idea'
+                  ? t('projectLibrary.aiGenerateFromIdeaPlaceholder')
+                  : t('projectLibrary.aiGenerateFromNovelPlaceholder')
+              }
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  event.preventDefault()
+                  void submitGenerateScript()
+                }
+              }}
+            />
+            <div className="modal-action">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={closeGenerateDialog} disabled={aiBusy}>
+                {t('projectLibrary.cancel')}
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => void submitGenerateScript()} disabled={aiBusy}>
+                {aiBusy ? <span className="loading loading-spinner loading-xs" /> : null}
+                {t('projectLibrary.aiGenerateScript')}
+              </button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={closeGenerateDialog} />
+        </dialog>
+      ) : null}
 
       <div ref={editorPaneRef} className="relative flex-1 min-h-0" onMouseUp={handleSelectionFinished} onKeyDown={handleEditorKeyDown}>
         <EditorContent

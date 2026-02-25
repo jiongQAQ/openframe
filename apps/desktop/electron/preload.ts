@@ -200,6 +200,8 @@ contextBridge.exposeInMainWorld('aiAPI', {
         | 'scene.dialogue-polish'
         | 'scene.pacing'
         | 'scene.continuity-check'
+        | 'script.from-idea'
+        | 'script.from-novel'
       context: string
       instruction?: string
       modelKey?: string
@@ -215,6 +217,8 @@ contextBridge.exposeInMainWorld('aiAPI', {
         | 'scene.dialogue-polish'
         | 'scene.pacing'
         | 'scene.continuity-check'
+        | 'script.from-idea'
+        | 'script.from-novel'
       context: string
       instruction?: string
       modelKey?: string

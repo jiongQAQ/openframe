@@ -160,6 +160,8 @@ interface Window {
         | 'scene.dialogue-polish'
         | 'scene.pacing'
         | 'scene.continuity-check'
+        | 'script.from-idea'
+        | 'script.from-novel'
       context: string
       instruction?: string
       modelKey?: string
@@ -172,6 +174,8 @@ interface Window {
         | 'scene.dialogue-polish'
         | 'scene.pacing'
         | 'scene.continuity-check'
+        | 'script.from-idea'
+        | 'script.from-novel'
       context: string
       instruction?: string
       modelKey?: string
