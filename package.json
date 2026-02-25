@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "pnpm --filter openframe dev",
     "build": "pnpm --filter openframe build",
+    "build:current": "pnpm --filter openframe build:current",
+    "build:mac": "pnpm --filter openframe build:mac",
+    "build:win": "pnpm --filter openframe build:win",
+    "build:linux": "pnpm --filter openframe build:linux",
     "lint": "pnpm -r lint",
     "db:generate": "pnpm --filter openframe db:generate",
     "db:migrate": "pnpm --filter openframe db:migrate",

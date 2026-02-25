@@ -10,12 +10,40 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        include:
+          - target: mac-x64
+            os: macos-latest
+            build_command: pnpm -C apps/desktop exec electron-builder --mac zip --x64 && pnpm -C apps/desktop exec electron-builder --mac dmg --x64
+            artifact_name: desktop-release-mac-x64
+            release_glob: |
+              apps/desktop/release/**/*-Mac-x64-*.zip
+              apps/desktop/release/**/*-Mac-x64-*.dmg
+              apps/desktop/release/**/*-Mac-x64-*.blockmap
+          - target: mac-arm64
+            os: macos-latest
+            build_command: pnpm -C apps/desktop exec electron-builder --mac zip --arm64 && pnpm -C apps/desktop exec electron-builder --mac dmg --arm64
+            artifact_name: desktop-release-mac-arm64
+            release_glob: |
+              apps/desktop/release/**/*-Mac-arm64-*.zip
+              apps/desktop/release/**/*-Mac-arm64-*.dmg
+              apps/desktop/release/**/*-Mac-arm64-*.blockmap
+          - target: windows-x64
+            os: windows-latest
+            build_command: pnpm -C apps/desktop exec electron-builder --win --x64
+            artifact_name: desktop-release-windows-x64
+            release_glob: |
+              apps/desktop/release/**/*.exe
+              apps/desktop/release/**/*.blockmap
+          - target: linux-x64
+            os: ubuntu-latest
+            build_command: pnpm -C apps/desktop exec electron-builder --linux --x64
+            artifact_name: desktop-release-linux-x64
+            release_glob: apps/desktop/release/**/*.AppImage
 
     steps:
       - name: Checkout
@@ -33,21 +61,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build desktop app
-        run: pnpm -C apps/desktop build
+      - name: Build renderer and electron bundles
+        run: pnpm -C apps/desktop exec tsc && pnpm -C apps/desktop exec vite build
+
+      - name: Package for target
+        run: ${{ matrix.build_command }}
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-release-${{ matrix.os }}
+          name: ${{ matrix.artifact_name }}
           path: apps/desktop/release/**/*
           if-no-files-found: error
 
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            apps/desktop/release/**/*.dmg
-            apps/desktop/release/**/*.exe
-            apps/desktop/release/**/*.AppImage
-            apps/desktop/release/**/*.blockmap
+          files: ${{ matrix.release_glob }}
