@@ -39,6 +39,7 @@ export interface AppSettings {
   theme: string
   onboarding_seen: string
   onboarding_version: string
+  prompt_overrides: string
   ai_config: AIConfig
   vec_dimension: number
   data_dir: string
@@ -62,6 +63,10 @@ export const store = new Store<AppSettings>({
       default: '',
     },
     onboarding_version: {
+      type: 'string',
+      default: '',
+    },
+    prompt_overrides: {
       type: 'string',
       default: '',
     },
@@ -124,6 +129,7 @@ export const store = new Store<AppSettings>({
     theme: 'system',
     onboarding_seen: '',
     onboarding_version: '',
+    prompt_overrides: '',
     ai_config: DEFAULT_AI_CONFIG,
     vec_dimension: 0,
     data_dir: '',

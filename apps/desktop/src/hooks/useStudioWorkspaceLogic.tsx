@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getSelectableModelsByType, type AIConfig } from '@openframe/providers'
+import { useLiveQuery } from '@tanstack/react-db'
 import PQueue from 'p-queue'
 import { useCharacterStudioLogic } from './panels/useCharacterStudioLogic'
 import { usePropStudioLogic } from './panels/usePropStudioLogic'
 import { useSceneStudioLogic } from './panels/useSceneStudioLogic'
 import { useShotProductionStudioLogic } from './panels/useShotProductionStudioLogic'
 import { seriesCollection } from '../db/series_collection'
+import { settingsCollection } from '../db/settings_collection'
+import {
+  PROMPT_OVERRIDES_SETTING_KEY,
+  parsePromptOverridesFromSetting,
+} from '../utils/prompt_overrides'
 
 export type StudioTaskStatus = 'queued' | 'running' | 'success' | 'error'
 
@@ -53,6 +59,15 @@ export function useStudioWorkspaceLogic({
   const [selectedImageModelKey, setSelectedImageModelKey] = useState('')
   const [videoModelOptions, setVideoModelOptions] = useState<Array<{ key: string; label: string }>>([])
   const [selectedVideoModelKey, setSelectedVideoModelKey] = useState('')
+  const { data: settingsList } = useLiveQuery(settingsCollection)
+  const settingsMap = useMemo(
+    () => Object.fromEntries((settingsList ?? []).map((item) => [item.id, item.value])),
+    [settingsList],
+  )
+  const promptOverrides = useMemo(
+    () => parsePromptOverridesFromSetting(settingsMap[PROMPT_OVERRIDES_SETTING_KEY]),
+    [settingsMap],
+  )
 
   function updateTask(id: string, patch: Partial<StudioTaskItem>) {
     setTaskQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
@@ -152,6 +167,7 @@ export function useStudioWorkspaceLogic({
     projectGenre,
     selectedTextModelKey,
     selectedImageModelKey,
+    promptOverrides,
     enqueueTask,
   })
 
@@ -165,6 +181,7 @@ export function useStudioWorkspaceLogic({
     projectRatio,
     selectedTextModelKey,
     selectedImageModelKey,
+    promptOverrides,
     enqueueTask,
   })
 
@@ -178,6 +195,7 @@ export function useStudioWorkspaceLogic({
     projectRatio,
     selectedTextModelKey,
     selectedImageModelKey,
+    promptOverrides,
     enqueueTask,
   })
 
@@ -222,6 +240,7 @@ export function useStudioWorkspaceLogic({
     projectCharacters,
     projectCharacterRelations,
     projectProps,
+    promptOverrides,
     enqueueTask,
   })
 

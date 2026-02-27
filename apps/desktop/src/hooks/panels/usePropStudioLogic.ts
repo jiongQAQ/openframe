@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
 import type { Prop } from '../../db/props_collection'
 import type { CreatePropDraft } from './types'
+import {
+  renderPromptTemplate,
+  type PromptOverrides,
+} from '../../utils/prompt_overrides'
 
 type QueueType = 'default' | 'media'
 
@@ -21,6 +25,7 @@ type Params = {
   projectRatio: '16:9' | '9:16'
   selectedTextModelKey: string
   selectedImageModelKey: string
+  promptOverrides: PromptOverrides
   enqueueTask: EnqueueTask
 }
 
@@ -123,6 +128,7 @@ export function usePropStudioLogic(params: Params) {
     projectRatio,
     selectedTextModelKey,
     selectedImageModelKey,
+    promptOverrides,
     enqueueTask,
   } = params
 
@@ -369,15 +375,13 @@ export function usePropStudioLogic(params: Params) {
     setPropBusyId(id)
     setPropError('')
     try {
-      const prompt = [
-        'Prop turnaround sheet, front view, side view, back view, consistent material and shape.',
-        'Clean studio lighting, white background, concept art style, high detail, no text watermark.',
-        `Project category: ${projectCategory || 'unknown'}`,
-        `Project style: ${projectGenre || 'unknown'}`,
-        `Prop name: ${prop.name || 'unknown'}`,
-        `Category: ${prop.category || 'unknown'}`,
-        `Description: ${prop.description || 'unknown'}`,
-      ].join('\n')
+      const prompt = renderPromptTemplate(promptOverrides.propTurnaround, {
+        projectCategory: projectCategory || 'unknown',
+        projectStyle: projectGenre || 'unknown',
+        propName: prop.name || 'unknown',
+        category: prop.category || 'unknown',
+        description: prop.description || 'unknown',
+      })
 
       const result = await window.aiAPI.generateImage({
         prompt,

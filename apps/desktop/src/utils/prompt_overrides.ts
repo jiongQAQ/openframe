@@ -1,0 +1,495 @@
+export const PROMPT_OVERRIDES_SETTING_KEY = 'prompt_overrides'
+
+export type PromptModality = 'image' | 'text' | 'video'
+
+const PROMPT_OVERRIDE_KEY_LIST = [
+  'characterTurnaround',
+  'propTurnaround',
+  'sceneTurnaround',
+  'shotImage',
+  'productionFrame',
+  'productionVideo',
+  'extractCharactersFromScript',
+  'enhanceCharacterFromScript',
+  'extractScenesFromScript',
+  'enhanceSceneFromScript',
+  'extractPropsFromScript',
+  'extractCharacterRelationsFromScript',
+  'extractShotsFromScript',
+] as const
+
+export type PromptOverrideKey = (typeof PROMPT_OVERRIDE_KEY_LIST)[number]
+
+export type PromptOverrides = Record<PromptOverrideKey, string>
+
+type PromptOverrideField = {
+  key: PromptOverrideKey
+  modality: PromptModality
+  labelKey: string
+  hintKey: string
+  placeholders: string[]
+}
+
+export const DEFAULT_PROMPT_OVERRIDES: PromptOverrides = {
+  characterTurnaround: [
+    'Create a production-ready character turnaround / portrait reference image.',
+    'Project category: {{projectCategory}}',
+    'Project style: {{projectStyle}}',
+    'Character name: {{name}}',
+    'Gender: {{gender}}',
+    'Age: {{age}}',
+    'Personality: {{personality}}',
+    'Appearance: {{appearance}}',
+    'Background: {{background}}',
+    '',
+    'Requirements:',
+    '- focus on this character only, no extra people',
+    '- preserve identity consistency and styling details',
+    '- clean background, high clarity, no text overlays',
+  ].join('\n'),
+  propTurnaround: [
+    'Create a production-ready prop reference image.',
+    'Project category: {{projectCategory}}',
+    'Project style: {{projectStyle}}',
+    'Prop name: {{propName}}',
+    'Category: {{category}}',
+    'Description: {{description}}',
+    '',
+    'Requirements:',
+    '- show only the prop, no human subjects',
+    '- emphasize materials, structure, and practical details',
+    '- clean composition, neutral background, no text overlays',
+  ].join('\n'),
+  sceneTurnaround: [
+    'Create an environment concept image for this scene.',
+    'Project category: {{projectCategory}}',
+    'Project style: {{projectStyle}}',
+    'Scene title: {{sceneTitle}}',
+    'Location: {{location}}',
+    'Time: {{time}}',
+    'Mood: {{mood}}',
+    '',
+    'Requirements:',
+    '- focus on scene environment and spatial layout',
+    '- avoid close-up portraits and avoid UI/text elements',
+    '- cinematic lighting and atmosphere consistent with mood',
+  ].join('\n'),
+  shotImage: [
+    'Create a storyboard keyframe image for one shot.',
+    'Project category: {{projectCategory}}',
+    'Project style: {{projectStyle}}',
+    'Shot title: {{shotTitle}}',
+    'Shot size: {{shotSize}}',
+    'Camera angle: {{cameraAngle}}',
+    'Camera move: {{cameraMove}}',
+    'Action: {{action}}',
+    'Scene title: {{sceneTitle}}',
+    'Location: {{location}}',
+    'Time: {{time}}',
+    'Mood: {{mood}}',
+    'Characters: {{characters}}',
+    'Props: {{props}}',
+    'Previous shot context: {{previousShotContext}}',
+    'Next shot context: {{nextShotContext}}',
+    '',
+    'Requirements:',
+    '- match the requested framing, camera language, and action',
+    '- keep visual continuity with adjacent shots',
+    '- no subtitles, no captions, no watermarks',
+  ].join('\n'),
+  productionFrame: [
+    'Generate the {{frameKind}} frame for this shot.',
+    'Direction context: {{direction}}',
+    'Project category: {{projectCategory}}',
+    'Project style: {{projectStyle}}',
+    'Shot title: {{shotTitle}}',
+    'Shot size: {{shotSize}}',
+    'Camera angle: {{cameraAngle}}',
+    'Camera move: {{cameraMove}}',
+    'Action: {{action}}',
+    'Scene title: {{sceneTitle}}',
+    'Location: {{location}}',
+    'Time: {{time}}',
+    'Mood: {{mood}}',
+    'Characters: {{characters}}',
+    'Props: {{props}}',
+    '',
+    'Requirements:',
+    '- maintain continuity with the shot middle frame and context',
+    '- keep character/prop identity stable',
+    '- no subtitles, no logos, no text overlays',
+  ].join('\n'),
+  productionVideo: [
+    'Generate a short cinematic video clip for this shot.',
+    '{{modeHint}}',
+    'Project category: {{projectCategory}}',
+    'Project style: {{projectStyle}}',
+    'Shot title: {{shotTitle}}',
+    'Shot size: {{shotSize}}',
+    'Camera angle: {{cameraAngle}}',
+    'Camera move: {{cameraMove}}',
+    'Action: {{action}}',
+    'Scene title: {{sceneTitle}}',
+    'Location: {{location}}',
+    'Time: {{time}}',
+    'Mood: {{mood}}',
+    'Characters: {{characters}}',
+    'Props: {{props}}',
+    '',
+    'Requirements:',
+    '- preserve scene continuity and identity consistency',
+    '- motion should follow camera and action requirements',
+    '- avoid subtitles, logos, and text overlays',
+  ].join('\n'),
+  extractCharactersFromScript: [
+    'You are a screenplay analyst.',
+    'Extract key characters from the script and summarize each one.',
+    'Age must be one of: {{characterAgeCanonical}}.',
+    'Character text fields (name/personality/appearance/background) must be written in {{outputLanguage}}.',
+    '{{languageRule}}',
+    'Return STRICT JSON only with shape:',
+    '{"characters":[{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}]}',
+    'Do not include markdown code fences.',
+    'Infer unknown fields conservatively; keep them short.',
+    'Script:\n{{script}}',
+  ].join('\n\n'),
+  enhanceCharacterFromScript: [
+    'You are a screenplay character designer.',
+    'Enhance one character card using the script context.',
+    'Age must be one of: {{characterAgeCanonical}}.',
+    'Character text fields (name/personality/appearance/background) must be written in {{outputLanguage}}.',
+    '{{languageRule}}',
+    'Return STRICT JSON only with shape:',
+    '{"character":{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}}',
+    'Keep the same character identity and name.',
+    'Do not include markdown code fences.',
+    'Current character:\n{{currentCharacter}}',
+    'Script:\n{{script}}',
+  ].join('\n\n'),
+  extractScenesFromScript: [
+    'You are a screenplay scene planner.',
+    'Extract key scenes from the script with concise production-ready info.',
+    'A scene means a continuous block in one primary location and time period.',
+    'Do NOT treat plot events/beats/actions as separate scenes.',
+    'If multiple events happen continuously in the same location/time, merge them into one scene.',
+    'Scene title must describe the setting or scene unit, not an event statement.',
+    'Bad title examples (event-level): "Argument erupts", "Finds a clue".',
+    'Good title examples (scene-level): "Police Station Interrogation Room", "Rooftop at Night".',
+    'All text fields (title/location/time/mood/description/shot_notes) must be written in {{outputLanguage}}.',
+    '{{languageRule}}',
+    'Return STRICT JSON only with shape:',
+    '{"scenes":[{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}]}',
+    'Do not include markdown code fences.',
+    'Keep each field concise and actionable.',
+    'Script:\n{{script}}',
+  ].join('\n\n'),
+  enhanceSceneFromScript: [
+    'You are a screenplay scene planner.',
+    'Enhance one scene card based on script context.',
+    'All text fields (title/location/time/mood/description/shot_notes) must be written in {{outputLanguage}}.',
+    '{{languageRule}}',
+    'Return STRICT JSON only with shape:',
+    '{"scene":{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}}',
+    'Do not include markdown code fences.',
+    'Current scene:\n{{currentScene}}',
+    'Script:\n{{script}}',
+  ].join('\n\n'),
+  extractPropsFromScript: [
+    'You are a screenplay production designer.',
+    'Extract key props from the script with concise production-ready info.',
+    'All text fields (name/category/description) must be written in {{outputLanguage}}.',
+    '{{languageRule}}',
+    'Return STRICT JSON only with shape:',
+    '{"props":[{"name":"","category":"","description":""}]}',
+    'Do not include markdown code fences.',
+    'Keep each field concise and actionable.',
+    'Do not output characters or scenes in props list unless they are clearly used as physical objects.',
+    'Script:\n{{script}}',
+  ].join('\n\n'),
+  extractCharacterRelationsFromScript: [
+    'You are a screenplay relationship analyst.',
+    'Extract project-level character relationships from the script.',
+    'When existing relations are provided, treat them as baseline and optimize them with script evidence.',
+    'Prefer updating existing links (type, strength, notes, evidence) before adding new links.',
+    'Each relationship must use only IDs from the provided character list.',
+    'No invented characters or IDs. No self-relations.',
+    'strength must be an integer from 1 to 5, where 5 is the strongest tie/conflict.',
+    'Return STRICT JSON only with shape:',
+    '{"relations":[{"source_ref":"","target_ref":"","relation_type":"","strength":3,"notes":"","evidence":""}]}',
+    'relation_type examples: family, ally, friend, rival, enemy, mentor, subordinate, lover, business, mystery.',
+    'notes should be concise relationship summary; evidence should mention key script clue.',
+    'Do not include markdown code fences.',
+    'Characters:\n{{characters}}',
+    'Existing relations:\n{{existingRelations}}',
+    'Script:\n{{script}}',
+  ].join('\n\n'),
+  extractShotsFromScript: [
+    'You are a screenplay storyboard planner.',
+    'Generate a practical shot list from the script.',
+    '{{targetCountSection}}',
+    'Narrative text fields (title/shot_size/camera_angle/camera_move/action/dialogue) must be written in {{outputLanguage}}.',
+    '{{languageRule}}',
+    'Maximize shot count as much as reasonably possible while staying faithful to the script.',
+    'Prefer finer granularity: split each scene into many short, meaningful beats instead of merging beats into long shots.',
+    'If uncertain between fewer vs more shots, choose more shots.',
+    'Cover the script from start to end with exhaustive beat coverage; avoid skipping transitions or intermediate actions.',
+    'Shots must form a coherent sequence with smooth transitions between adjacent shots.',
+    'Preserve visual continuity across neighboring shots: screen direction, eyeline, character positions, and action progression.',
+    'Use scene switches only when motivated by the script narrative progression.',
+    'Avoid disconnected or repetitive shots that do not advance the beat from the previous shot.',
+    'Continuity detail must be very strong: adjacent shots should read like consecutive moments in the same ongoing action unless the script explicitly jumps.',
+    'Keep action text specific and stateful, inheriting important props/poses/positions from prior shots when applicable.',
+    'Character relations are soft guidance only, not hard constraints.',
+    'Use relations to bias pairings, shot contrast, and emotional framing when script evidence allows.',
+    'Never override explicit script actions, chronology, or participant list just to match relations.',
+    'Each shot must include scene_ref, character_refs, and prop_refs, using ONLY provided IDs.',
+    'Do not invent new scene_ref / character_refs / prop_refs values.',
+    'Return STRICT JSON only with shape:',
+    '{"shots":[{"title":"","scene_ref":"","character_refs":[],"prop_refs":[],"shot_size":"","camera_angle":"","camera_move":"","duration_sec":3,"action":"","dialogue":""}]}',
+    'Keep each shot concise and production-usable.',
+    'duration_sec should usually be between 1 and 5 unless the script clearly requires otherwise.',
+    'Do not include markdown code fences.',
+    'Scenes:\n{{scenes}}',
+    'Characters:\n{{characters}}',
+    'Character relations:\n{{relations}}',
+    'Props:\n{{props}}',
+    'Script:\n{{script}}',
+  ].join('\n\n'),
+}
+
+export const PROMPT_OVERRIDE_FIELDS: PromptOverrideField[] = [
+  {
+    key: 'characterTurnaround',
+    modality: 'image',
+    labelKey: 'settings.promptCharacterTurnaround',
+    hintKey: 'settings.promptCharacterTurnaroundHint',
+    placeholders: [
+      'projectCategory',
+      'projectStyle',
+      'name',
+      'gender',
+      'age',
+      'personality',
+      'appearance',
+      'background',
+    ],
+  },
+  {
+    key: 'propTurnaround',
+    modality: 'image',
+    labelKey: 'settings.promptPropTurnaround',
+    hintKey: 'settings.promptPropTurnaroundHint',
+    placeholders: [
+      'projectCategory',
+      'projectStyle',
+      'propName',
+      'category',
+      'description',
+    ],
+  },
+  {
+    key: 'sceneTurnaround',
+    modality: 'image',
+    labelKey: 'settings.promptSceneTurnaround',
+    hintKey: 'settings.promptSceneTurnaroundHint',
+    placeholders: [
+      'projectCategory',
+      'projectStyle',
+      'sceneTitle',
+      'location',
+      'time',
+      'mood',
+    ],
+  },
+  {
+    key: 'shotImage',
+    modality: 'image',
+    labelKey: 'settings.promptShotImage',
+    hintKey: 'settings.promptShotImageHint',
+    placeholders: [
+      'projectCategory',
+      'projectStyle',
+      'shotTitle',
+      'shotSize',
+      'cameraAngle',
+      'cameraMove',
+      'action',
+      'sceneTitle',
+      'location',
+      'time',
+      'mood',
+      'characters',
+      'props',
+      'previousShotContext',
+      'nextShotContext',
+    ],
+  },
+  {
+    key: 'productionFrame',
+    modality: 'image',
+    labelKey: 'settings.promptProductionFrame',
+    hintKey: 'settings.promptProductionFrameHint',
+    placeholders: [
+      'frameKind',
+      'direction',
+      'projectCategory',
+      'projectStyle',
+      'shotTitle',
+      'shotSize',
+      'cameraAngle',
+      'cameraMove',
+      'action',
+      'sceneTitle',
+      'location',
+      'time',
+      'mood',
+      'characters',
+      'props',
+    ],
+  },
+  {
+    key: 'extractCharactersFromScript',
+    modality: 'text',
+    labelKey: 'settings.promptExtractCharactersFromScript',
+    hintKey: 'settings.promptExtractCharactersFromScriptHint',
+    placeholders: [
+      'characterAgeCanonical',
+      'outputLanguage',
+      'languageRule',
+      'script',
+    ],
+  },
+  {
+    key: 'enhanceCharacterFromScript',
+    modality: 'text',
+    labelKey: 'settings.promptEnhanceCharacterFromScript',
+    hintKey: 'settings.promptEnhanceCharacterFromScriptHint',
+    placeholders: [
+      'characterAgeCanonical',
+      'outputLanguage',
+      'languageRule',
+      'currentCharacter',
+      'script',
+    ],
+  },
+  {
+    key: 'extractScenesFromScript',
+    modality: 'text',
+    labelKey: 'settings.promptExtractScenesFromScript',
+    hintKey: 'settings.promptExtractScenesFromScriptHint',
+    placeholders: [
+      'outputLanguage',
+      'languageRule',
+      'script',
+    ],
+  },
+  {
+    key: 'enhanceSceneFromScript',
+    modality: 'text',
+    labelKey: 'settings.promptEnhanceSceneFromScript',
+    hintKey: 'settings.promptEnhanceSceneFromScriptHint',
+    placeholders: [
+      'outputLanguage',
+      'languageRule',
+      'currentScene',
+      'script',
+    ],
+  },
+  {
+    key: 'extractPropsFromScript',
+    modality: 'text',
+    labelKey: 'settings.promptExtractPropsFromScript',
+    hintKey: 'settings.promptExtractPropsFromScriptHint',
+    placeholders: [
+      'outputLanguage',
+      'languageRule',
+      'script',
+    ],
+  },
+  {
+    key: 'extractCharacterRelationsFromScript',
+    modality: 'text',
+    labelKey: 'settings.promptExtractCharacterRelationsFromScript',
+    hintKey: 'settings.promptExtractCharacterRelationsFromScriptHint',
+    placeholders: [
+      'characters',
+      'existingRelations',
+      'script',
+    ],
+  },
+  {
+    key: 'extractShotsFromScript',
+    modality: 'text',
+    labelKey: 'settings.promptExtractShotsFromScript',
+    hintKey: 'settings.promptExtractShotsFromScriptHint',
+    placeholders: [
+      'targetCountSection',
+      'outputLanguage',
+      'languageRule',
+      'scenes',
+      'characters',
+      'relations',
+      'props',
+      'script',
+    ],
+  },
+  {
+    key: 'productionVideo',
+    modality: 'video',
+    labelKey: 'settings.promptProductionVideo',
+    hintKey: 'settings.promptProductionVideoHint',
+    placeholders: [
+      'modeHint',
+      'projectCategory',
+      'projectStyle',
+      'shotTitle',
+      'shotSize',
+      'cameraAngle',
+      'cameraMove',
+      'action',
+      'sceneTitle',
+      'location',
+      'time',
+      'mood',
+      'characters',
+      'props',
+    ],
+  },
+]
+
+export function parsePromptOverridesFromSetting(raw: string | null | undefined): PromptOverrides {
+  if (!raw) return { ...DEFAULT_PROMPT_OVERRIDES }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const next = { ...DEFAULT_PROMPT_OVERRIDES }
+    for (const key of PROMPT_OVERRIDE_KEY_LIST) {
+      const value = parsed[key]
+      if (typeof value === 'string' && value.trim()) {
+        next[key] = value
+      }
+    }
+    return next
+  } catch {
+    return { ...DEFAULT_PROMPT_OVERRIDES }
+  }
+}
+
+export function renderPromptTemplate(
+  template: string,
+  variables: Record<string, string | number | boolean | null | undefined>,
+): string {
+  if (!template) return ''
+
+  const rendered = template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, token: string) => {
+    const value = variables[token]
+    if (value === null || value === undefined) return ''
+    return String(value)
+  })
+
+  return rendered
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim()
+}

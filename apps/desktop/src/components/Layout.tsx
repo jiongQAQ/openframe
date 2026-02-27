@@ -3,6 +3,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import {
   FolderOpen,
+  MessageSquare,
   SwatchBook,
   Settings,
   type LucideIcon,
@@ -20,6 +21,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { to: '/projects', icon: FolderOpen, labelKey: 'menu.projects' },
   { to: '/genres', icon: SwatchBook, labelKey: 'menu.list' },
+  { to: '/prompts', icon: MessageSquare, labelKey: 'menu.prompts' },
 ]
 const ONBOARDING_VERSION = '3'
 

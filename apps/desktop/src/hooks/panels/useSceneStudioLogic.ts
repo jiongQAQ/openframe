@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
 import type { CreateSceneDraft, Scene } from './types'
+import {
+  renderPromptTemplate,
+  type PromptOverrides,
+} from '../../utils/prompt_overrides'
 
 type QueueType = 'default' | 'media'
 
@@ -20,6 +24,7 @@ type Params = {
   projectRatio: '16:9' | '9:16'
   selectedTextModelKey: string
   selectedImageModelKey: string
+  promptOverrides: PromptOverrides
   enqueueTask: EnqueueTask
 }
 
@@ -125,6 +130,7 @@ export function useSceneStudioLogic(params: Params) {
     projectRatio,
     selectedTextModelKey,
     selectedImageModelKey,
+    promptOverrides,
     enqueueTask,
   } = params
 
@@ -423,20 +429,14 @@ export function useSceneStudioLogic(params: Params) {
     setSceneBusyId(id)
     setSceneError('')
     try {
-      const prompt = [
-        'Scene turnaround sheet, three-view composition: front view, left 45-degree view, right 45-degree view.',
-        'Environment-only scene. No people, no characters, no human silhouettes, no portraits, no body parts, no face close-ups.',
-        'If any input mentions characters, dialogue, or actions, ignore them completely and keep only environmental design.',
-        'Keep architecture, props, materials, and lighting style consistent across the three views.',
-        'High quality, production-ready, no text watermark.',
-        `Project category: ${projectCategory || 'unknown'}`,
-        `Project style: ${projectGenre || 'unknown'}`,
-        `Scene title: ${scene.title || 'untitled'}`,
-        `Location: ${scene.location || 'unknown'}`,
-        `Time: ${scene.time || 'unknown'}`,
-        `Mood: ${scene.mood || 'unknown'}`,
-        'Output requirement: environment and set design only.',
-      ].join('\n')
+      const prompt = renderPromptTemplate(promptOverrides.sceneTurnaround, {
+        projectCategory: projectCategory || 'unknown',
+        projectStyle: projectGenre || 'unknown',
+        sceneTitle: scene.title || 'untitled',
+        location: scene.location || 'unknown',
+        time: scene.time || 'unknown',
+        mood: scene.mood || 'unknown',
+      })
 
       const result = await window.aiAPI.generateImage({
         prompt,

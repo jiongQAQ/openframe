@@ -3,6 +3,10 @@ import type { TFunction } from 'i18next'
 import type { Character } from '../../db/characters_collection'
 import type { CharacterRelation } from '../../db/character_relations_collection'
 import type { CreateCharacterDraft } from './types'
+import {
+  renderPromptTemplate,
+  type PromptOverrides,
+} from '../../utils/prompt_overrides'
 
 type QueueType = 'default' | 'media'
 
@@ -21,6 +25,7 @@ type Params = {
   projectGenre: string
   selectedTextModelKey: string
   selectedImageModelKey: string
+  promptOverrides: PromptOverrides
   enqueueTask: EnqueueTask
 }
 
@@ -199,6 +204,7 @@ export function useCharacterStudioLogic(params: Params) {
     projectGenre,
     selectedTextModelKey,
     selectedImageModelKey,
+    promptOverrides,
     enqueueTask,
   } = params
 
@@ -603,18 +609,16 @@ export function useCharacterStudioLogic(params: Params) {
     setCharacterBusyId(id)
     setCharacterError('')
     try {
-      const prompt = [
-        'Character turnaround sheet, full body, front view, side view, back view, consistent costume and face.',
-        'Clean studio lighting, white background, concept art style, high detail, no text watermark.',
-        `Project category: ${projectCategory || 'unknown'}`,
-        `Project style: ${projectGenre || 'unknown'}`,
-        `Name: ${character.name}`,
-        `Gender: ${character.gender || 'unknown'}`,
-        `Age: ${character.age || 'unknown'}`,
-        `Personality: ${character.personality || 'unknown'}`,
-        `Appearance: ${character.appearance || 'unknown'}`,
-        `Background: ${character.background || 'unknown'}`,
-      ].join('\n')
+      const prompt = renderPromptTemplate(promptOverrides.characterTurnaround, {
+        projectCategory: projectCategory || 'unknown',
+        projectStyle: projectGenre || 'unknown',
+        name: character.name || 'unknown',
+        gender: character.gender || 'unknown',
+        age: character.age || 'unknown',
+        personality: character.personality || 'unknown',
+        appearance: character.appearance || 'unknown',
+        background: character.background || 'unknown',
+      })
 
       const result = await window.aiAPI.generateImage({ prompt, modelKey: selectedImageModelKey || undefined })
       if (!result.ok) {

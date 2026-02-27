@@ -8,11 +8,17 @@ import { characterRelationsCollection } from '../db/character_relations_collecti
 import { propsCollection } from '../db/props_collection'
 import { projectsCollection } from '../db/projects_collection'
 import { seriesCollection } from '../db/series_collection'
+import { settingsCollection } from '../db/settings_collection'
 import { CharacterRelationGraphPanel } from './CharacterRelationGraphPanel'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
 import { PropPanel, type CreatePropDraft } from './PropPanel'
 import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
 import { StudioWorkspace } from './StudioWorkspace'
+import {
+  PROMPT_OVERRIDES_SETTING_KEY,
+  parsePromptOverridesFromSetting,
+  renderPromptTemplate,
+} from '../utils/prompt_overrides'
 
 type ProjectDetailTab = 'episodes' | 'characters' | 'relations' | 'props' | 'scenes'
 type Scene = Awaited<ReturnType<Window['scenesAPI']['getByProject']>>[number]
@@ -26,6 +32,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const { data: allCharacters } = useLiveQuery(charactersCollection)
   const { data: allCharacterRelations } = useLiveQuery(characterRelationsCollection)
   const { data: allProps } = useLiveQuery(propsCollection)
+  const { data: settingsList } = useLiveQuery(settingsCollection)
 
   const project = useMemo(() => (projects ?? []).find((p) => p.id === projectId) ?? null, [projects, projectId])
   const series = useMemo(
@@ -43,6 +50,14 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const projectCharacterRelations = useMemo(
     () => (allCharacterRelations ?? []).filter((item) => item.project_id === projectId).sort((a, b) => a.created_at - b.created_at),
     [allCharacterRelations, projectId],
+  )
+  const settingsMap = useMemo(
+    () => Object.fromEntries((settingsList ?? []).map((item) => [item.id, item.value])),
+    [settingsList],
+  )
+  const promptOverrides = useMemo(
+    () => parsePromptOverridesFromSetting(settingsMap[PROMPT_OVERRIDES_SETTING_KEY]),
+    [settingsMap],
   )
   const selectedSeriesId = useMemo(() => {
     const params = new URLSearchParams(location.search)
@@ -452,17 +467,16 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       return { ok: false, error: t('projectLibrary.characterNameRequired') }
     }
 
-    const prompt = [
-      'Character portrait design, clean background, cinematic style, no text watermark.',
-      `Project category: ${project?.category || 'unknown'}`,
-      `Project style: ${project?.genre || 'unknown'}`,
-      `Name: ${draft.name || 'unknown'}`,
-      `Gender: ${draft.gender || 'unknown'}`,
-      `Age: ${draft.age || 'unknown'}`,
-      `Personality: ${draft.personality || 'unknown'}`,
-      `Appearance: ${draft.appearance || 'unknown'}`,
-      `Background: ${draft.background || 'unknown'}`,
-    ].join('\n')
+    const prompt = renderPromptTemplate(promptOverrides.characterTurnaround, {
+      projectCategory: project?.category || 'unknown',
+      projectStyle: project?.genre || 'unknown',
+      name: draft.name || 'unknown',
+      gender: draft.gender || 'unknown',
+      age: draft.age || 'unknown',
+      personality: draft.personality || 'unknown',
+      appearance: draft.appearance || 'unknown',
+      background: draft.background || 'unknown',
+    })
 
     try {
       const result = await window.aiAPI.generateImage({
@@ -501,19 +515,14 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       return { ok: false, error: t('projectLibrary.sceneTitleRequired') }
     }
 
-    const prompt = [
-      'Scene turnaround sheet, three-view composition: front view, left 45-degree view, right 45-degree view.',
-      'Environment-only scene. No people, no characters, no human silhouettes, no portraits, no body parts, no face close-ups, no text watermark.',
-      'If any input mentions characters, dialogue, or actions, ignore them completely and keep only environmental design.',
-      'Keep architecture, props, materials, and lighting style consistent across the three views.',
-      `Project category: ${project?.category || 'unknown'}`,
-      `Project style: ${project?.genre || 'unknown'}`,
-      `Scene title: ${draft.title || 'unknown'}`,
-      `Location: ${draft.location || 'unknown'}`,
-      `Time: ${draft.time || 'unknown'}`,
-      `Mood: ${draft.mood || 'unknown'}`,
-      'Output requirement: environment and set design only.',
-    ].join('\n')
+    const prompt = renderPromptTemplate(promptOverrides.sceneTurnaround, {
+      projectCategory: project?.category || 'unknown',
+      projectStyle: project?.genre || 'unknown',
+      sceneTitle: draft.title || 'unknown',
+      location: draft.location || 'unknown',
+      time: draft.time || 'unknown',
+      mood: draft.mood || 'unknown',
+    })
 
     try {
       const result = await window.aiAPI.generateImage({

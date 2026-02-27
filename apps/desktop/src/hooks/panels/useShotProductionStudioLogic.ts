@@ -4,6 +4,10 @@ import type { Character } from '../../db/characters_collection'
 import type { CharacterRelation } from '../../db/character_relations_collection'
 import type { Prop } from '../../db/props_collection'
 import type { Scene, ShotCard, ShotDraft, EditedClipPayload } from './types'
+import {
+  renderPromptTemplate,
+  type PromptOverrides,
+} from '../../utils/prompt_overrides'
 
 type EnqueueTask = (
   title: string,
@@ -29,6 +33,7 @@ type Params = {
   projectCharacters: Character[]
   projectCharacterRelations: CharacterRelation[]
   projectProps: Prop[]
+  promptOverrides: PromptOverrides
   enqueueTask: EnqueueTask
 }
 
@@ -125,57 +130,6 @@ function formatShotContextLine(
   ].join(' | ')
 }
 
-function buildShotImagePrompt(params: {
-  shot: ShotCard
-  scene: Scene | undefined
-  characterNames: string
-  propNames: string
-  previousShot: ShotCard | undefined
-  nextShot: ShotCard | undefined
-  sceneMap: Map<string, Scene>
-  characterMap: Map<string, Character>
-  propMap: Map<string, Prop>
-  projectCategory: string
-  projectGenre: string
-}): string {
-  const {
-    shot,
-    scene,
-    characterNames,
-    propNames,
-    previousShot,
-    nextShot,
-    sceneMap,
-    characterMap,
-    propMap,
-    projectCategory,
-    projectGenre,
-  } = params
-
-  return [
-    'Cinematic storyboard shot keyframe, production-ready, high detail, no watermark text.',
-    'Reference consistency is mandatory: preserve identity, costume, silhouette, and environment composition from reference images.',
-    'If references conflict, prioritize character identity consistency first, then scene continuity.',
-    'Shot continuity is mandatory: keep screen direction, eyeline, and spatial geography coherent with neighboring shots.',
-    'Bridge naturally from previous shot into current shot, and leave visual room for next shot transition.',
-    `Project category: ${projectCategory || 'unknown'}`,
-    `Project style: ${projectGenre || 'unknown'}`,
-    `Shot title: ${shot.title || 'untitled shot'}`,
-    `Shot size: ${shot.shot_size || 'unknown'}`,
-    `Camera angle: ${shot.camera_angle || 'unknown'}`,
-    `Camera movement: ${shot.camera_move || 'unknown'}`,
-    `Action: ${shot.action || 'unknown'}`,
-    `Scene: ${scene?.title || 'unknown'}`,
-    `Location: ${scene?.location || 'unknown'}`,
-    `Time: ${scene?.time || 'unknown'}`,
-    `Mood: ${scene?.mood || 'unknown'}`,
-    characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
-    propNames ? `Props in shot: ${propNames}` : 'Props in shot: none',
-    `Previous shot context: ${formatShotContextLine(previousShot, sceneMap, characterMap, propMap)}`,
-    `Next shot context: ${formatShotContextLine(nextShot, sceneMap, characterMap, propMap)}`,
-  ].join('\n')
-}
-
 export function useShotProductionStudioLogic(params: Params) {
   const {
     t,
@@ -195,6 +149,7 @@ export function useShotProductionStudioLogic(params: Params) {
     projectCharacters,
     projectCharacterRelations,
     projectProps,
+    promptOverrides,
     enqueueTask,
   } = params
 
@@ -468,18 +423,22 @@ export function useShotProductionStudioLogic(params: Params) {
         if (pref) referenceImages.push(pref)
       }
 
-      const prompt = buildShotImagePrompt({
-        shot,
-        scene,
-        characterNames,
-        propNames,
-        previousShot,
-        nextShot,
-        sceneMap,
-        characterMap,
-        propMap,
-        projectCategory,
-        projectGenre,
+      const prompt = renderPromptTemplate(promptOverrides.shotImage, {
+        projectCategory: projectCategory || 'unknown',
+        projectStyle: projectGenre || 'unknown',
+        shotTitle: shot.title || 'untitled shot',
+        shotSize: shot.shot_size || 'unknown',
+        cameraAngle: shot.camera_angle || 'unknown',
+        cameraMove: shot.camera_move || 'unknown',
+        action: shot.action || 'unknown',
+        sceneTitle: scene?.title || 'unknown',
+        location: scene?.location || 'unknown',
+        time: scene?.time || 'unknown',
+        mood: scene?.mood || 'unknown',
+        characters: characterNames || 'none',
+        props: propNames || 'none',
+        previousShotContext: formatShotContextLine(previousShot, sceneMap, characterMap, propMap),
+        nextShotContext: formatShotContextLine(nextShot, sceneMap, characterMap, propMap),
       })
 
       const result = await window.aiAPI.generateImage({
@@ -568,18 +527,22 @@ export function useShotProductionStudioLogic(params: Params) {
         if (pref) referenceImages.push(pref)
       }
 
-      const prompt = buildShotImagePrompt({
-        shot,
-        scene,
-        characterNames,
-        propNames,
-        previousShot,
-        nextShot,
-        sceneMap,
-        characterMap,
-        propMap,
-        projectCategory,
-        projectGenre,
+      const prompt = renderPromptTemplate(promptOverrides.shotImage, {
+        projectCategory: projectCategory || 'unknown',
+        projectStyle: projectGenre || 'unknown',
+        shotTitle: shot.title || 'untitled shot',
+        shotSize: shot.shot_size || 'unknown',
+        cameraAngle: shot.camera_angle || 'unknown',
+        cameraMove: shot.camera_move || 'unknown',
+        action: shot.action || 'unknown',
+        sceneTitle: scene?.title || 'unknown',
+        location: scene?.location || 'unknown',
+        time: scene?.time || 'unknown',
+        mood: scene?.mood || 'unknown',
+        characters: characterNames || 'none',
+        props: propNames || 'none',
+        previousShotContext: formatShotContextLine(previousShot, sceneMap, characterMap, propMap),
+        nextShotContext: formatShotContextLine(nextShot, sceneMap, characterMap, propMap),
       })
 
       const result = await window.aiAPI.generateImage({
@@ -687,24 +650,23 @@ export function useShotProductionStudioLogic(params: Params) {
         return
       }
 
-      const prompt = [
-        `Cinematic storyboard ${kind === 'first' ? 'starting' : 'ending'} keyframe, production-ready, high detail, no watermark text.`,
-        `Use the first reference image as the MIDDLE frame of the same shot. Generate a ${kind === 'first' ? 'preceding' : 'following'} frame with strict continuity.`,
-        'Keep identity, costume, location, composition logic, and lighting continuity.',
-        `Project category: ${projectCategory || 'unknown'}`,
-        `Project style: ${projectGenre || 'unknown'}`,
-        `Shot title: ${activeShot.title || 'untitled shot'}`,
-        `Shot size: ${activeShot.shot_size || 'unknown'}`,
-        `Camera angle: ${activeShot.camera_angle || 'unknown'}`,
-        `Camera movement: ${activeShot.camera_move || 'unknown'}`,
-        `Action: ${activeShot.action || 'unknown'}`,
-        `Scene: ${scene?.title || 'unknown'}`,
-        `Location: ${scene?.location || 'unknown'}`,
-        `Time: ${scene?.time || 'unknown'}`,
-        `Mood: ${scene?.mood || 'unknown'}`,
-        characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
-        propNames ? `Props in shot: ${propNames}` : 'Props in shot: none',
-      ].join('\n')
+      const prompt = renderPromptTemplate(promptOverrides.productionFrame, {
+        frameKind: kind === 'first' ? 'starting' : 'ending',
+        direction: kind === 'first' ? 'preceding' : 'following',
+        projectCategory: projectCategory || 'unknown',
+        projectStyle: projectGenre || 'unknown',
+        shotTitle: activeShot.title || 'untitled shot',
+        shotSize: activeShot.shot_size || 'unknown',
+        cameraAngle: activeShot.camera_angle || 'unknown',
+        cameraMove: activeShot.camera_move || 'unknown',
+        action: activeShot.action || 'unknown',
+        sceneTitle: scene?.title || 'unknown',
+        location: scene?.location || 'unknown',
+        time: scene?.time || 'unknown',
+        mood: scene?.mood || 'unknown',
+        characters: characterNames || 'none',
+        props: propNames || 'none',
+      })
 
       const result = await window.aiAPI.generateImage({
         prompt: referenceImages.length > 0 ? { text: prompt, images: referenceImages } : prompt,
@@ -849,25 +811,24 @@ export function useShotProductionStudioLogic(params: Params) {
         if (pref) referenceImages.push(pref)
       }
 
-      const prompt = [
-        'Cinematic video generation for storyboard production, no watermark text.',
-        opts.mode === 'single'
+      const prompt = renderPromptTemplate(promptOverrides.productionVideo, {
+        modeHint: opts.mode === 'single'
           ? 'Generate a short coherent clip using the single reference frame as key visual anchor.'
           : 'Generate a short coherent clip transitioning from first frame to last frame with continuity.',
-        `Project category: ${projectCategory || 'unknown'}`,
-        `Project style: ${projectGenre || 'unknown'}`,
-        `Shot title: ${shot.title || 'untitled shot'}`,
-        `Shot size: ${shot.shot_size || 'unknown'}`,
-        `Camera angle: ${shot.camera_angle || 'unknown'}`,
-        `Camera movement: ${shot.camera_move || 'unknown'}`,
-        `Action: ${shot.action || 'unknown'}`,
-        `Scene: ${scene?.title || 'unknown'}`,
-        `Location: ${scene?.location || 'unknown'}`,
-        `Time: ${scene?.time || 'unknown'}`,
-        `Mood: ${scene?.mood || 'unknown'}`,
-        characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
-        propNames ? `Props in shot: ${propNames}` : 'Props in shot: none',
-      ].join('\n')
+        projectCategory: projectCategory || 'unknown',
+        projectStyle: projectGenre || 'unknown',
+        shotTitle: shot.title || 'untitled shot',
+        shotSize: shot.shot_size || 'unknown',
+        cameraAngle: shot.camera_angle || 'unknown',
+        cameraMove: shot.camera_move || 'unknown',
+        action: shot.action || 'unknown',
+        sceneTitle: scene?.title || 'unknown',
+        location: scene?.location || 'unknown',
+        time: scene?.time || 'unknown',
+        mood: scene?.mood || 'unknown',
+        characters: characterNames || 'none',
+        props: propNames || 'none',
+      })
 
       const result = await window.aiAPI.generateVideo({
         prompt: { text: prompt, images: referenceImages },
