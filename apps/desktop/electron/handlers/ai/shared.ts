@@ -25,6 +25,15 @@ export type PropExtractRow = {
   description: string
 }
 
+export type CharacterRelationExtractRow = {
+  source_ref: string
+  target_ref: string
+  relation_type: string
+  strength: number
+  notes: string
+  evidence: string
+}
+
 export type ShotExtractRow = {
   title: string
   scene_ref: string
@@ -188,6 +197,43 @@ export function parseProps(raw: string): PropExtractRow[] {
       }
     })
     .filter((row) => row.name)
+}
+
+export function parseCharacterRelations(raw: string): CharacterRelationExtractRow[] {
+  const obj = extractJsonObject(raw)
+  const list = Array.isArray(obj?.relations) ? obj.relations : []
+  const rows = list
+    .map((item) => {
+      const row = item as Record<string, unknown>
+      const strengthRaw = row.strength
+      const strengthValue =
+        typeof strengthRaw === 'number'
+          ? strengthRaw
+          : typeof strengthRaw === 'string'
+            ? Number(strengthRaw)
+            : 3
+      const strength = Number.isFinite(strengthValue)
+        ? Math.max(1, Math.min(5, Math.round(strengthValue)))
+        : 3
+      return {
+        source_ref: toText(row.source_ref).trim(),
+        target_ref: toText(row.target_ref).trim(),
+        relation_type: toText(row.relation_type).trim(),
+        strength,
+        notes: toText(row.notes).trim(),
+        evidence: toText(row.evidence).trim(),
+      }
+    })
+    .filter((row) => row.source_ref && row.target_ref && row.source_ref !== row.target_ref)
+
+  const dedup = new Map<string, CharacterRelationExtractRow>()
+  for (const row of rows) {
+    const key = `${row.source_ref}|${row.target_ref}|${row.relation_type.toLowerCase()}`
+    if (!dedup.has(key)) {
+      dedup.set(key, row)
+    }
+  }
+  return [...dedup.values()]
 }
 
 export function parseShots(raw: string): ShotExtractRow[] {

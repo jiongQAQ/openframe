@@ -4,15 +4,17 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from '@tanstack/react-db'
 import { ArrowLeft, Clock3, Play, Plus, Trash2 } from 'lucide-react'
 import { charactersCollection } from '../db/characters_collection'
+import { characterRelationsCollection } from '../db/character_relations_collection'
 import { propsCollection } from '../db/props_collection'
 import { projectsCollection } from '../db/projects_collection'
 import { seriesCollection } from '../db/series_collection'
+import { CharacterRelationGraphPanel } from './CharacterRelationGraphPanel'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
 import { PropPanel, type CreatePropDraft } from './PropPanel'
 import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
 import { StudioWorkspace } from './StudioWorkspace'
 
-type ProjectDetailTab = 'episodes' | 'characters' | 'props' | 'scenes'
+type ProjectDetailTab = 'episodes' | 'characters' | 'relations' | 'props' | 'scenes'
 type Scene = Awaited<ReturnType<Window['scenesAPI']['getByProject']>>[number]
 
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
@@ -22,6 +24,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const { data: projects } = useLiveQuery(projectsCollection)
   const { data: allSeries } = useLiveQuery(seriesCollection)
   const { data: allCharacters } = useLiveQuery(charactersCollection)
+  const { data: allCharacterRelations } = useLiveQuery(characterRelationsCollection)
   const { data: allProps } = useLiveQuery(propsCollection)
 
   const project = useMemo(() => (projects ?? []).find((p) => p.id === projectId) ?? null, [projects, projectId])
@@ -36,6 +39,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const projectProps = useMemo(
     () => (allProps ?? []).filter((item) => item.project_id === projectId).sort((a, b) => a.created_at - b.created_at),
     [allProps, projectId],
+  )
+  const projectCharacterRelations = useMemo(
+    () => (allCharacterRelations ?? []).filter((item) => item.project_id === projectId).sort((a, b) => a.created_at - b.created_at),
+    [allCharacterRelations, projectId],
   )
   const selectedSeriesId = useMemo(() => {
     const params = new URLSearchParams(location.search)
@@ -53,6 +60,8 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>('episodes')
   const [saving, setSaving] = useState(false)
   const [characterError, setCharacterError] = useState('')
+  const [relationError, setRelationError] = useState('')
+  const [relationGenerating, setRelationGenerating] = useState(false)
   const [propError, setPropError] = useState('')
   const [sceneError, setSceneError] = useState('')
   const [projectScenes, setProjectScenes] = useState<Scene[]>([])
@@ -90,6 +99,11 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         key: 'characters',
         label: t('projectLibrary.tabCharacterLibrary'),
         subtitle: t('projectLibrary.charactersSubtitle'),
+      },
+      {
+        key: 'relations',
+        label: t('projectLibrary.tabRelationGraph'),
+        subtitle: t('projectLibrary.relationsSubtitle'),
       },
       {
         key: 'props',
@@ -198,6 +212,69 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       charactersCollection.delete(id)
     } catch {
       setCharacterError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleGenerateCharacterRelations() {
+    setRelationError('')
+
+    if (projectCharacters.length < 2) {
+      setRelationError(t('projectLibrary.relationNeedCharacters'))
+      return
+    }
+
+    const script = series
+      .map((item) => item.script.trim())
+      .filter(Boolean)
+      .join('\n\n--- Episode Break ---\n\n')
+      .trim()
+
+    if (!script) {
+      setRelationError(t('projectLibrary.relationNeedScript'))
+      return
+    }
+
+    const shouldReplace = window.confirm(t('projectLibrary.relationGenerateConfirm'))
+    if (!shouldReplace) return
+
+    setRelationGenerating(true)
+    try {
+      const result = await window.aiAPI.extractCharacterRelationsFromScript({
+        script,
+        characters: projectCharacters.map((item) => ({
+          id: item.id,
+          name: item.name,
+          personality: item.personality,
+          background: item.background,
+        })),
+      })
+      if (!result.ok) {
+        setRelationError(result.error)
+        return
+      }
+
+      const nextRows = result.relations.map((item, index) => ({
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        source_character_id: item.source_ref,
+        target_character_id: item.target_ref,
+        relation_type: item.relation_type,
+        strength: item.strength,
+        notes: item.notes,
+        evidence: item.evidence,
+        created_at: Date.now() + index,
+      }))
+
+      for (const row of projectCharacterRelations) {
+        characterRelationsCollection.delete(row.id)
+      }
+      for (const row of nextRows) {
+        characterRelationsCollection.insert(row)
+      }
+    } catch {
+      setRelationError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setRelationGenerating(false)
     }
   }
 
@@ -464,6 +541,9 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         {activeTab === 'characters' && characterError ? (
           <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{characterError}</div>
         ) : null}
+        {activeTab === 'relations' && relationError ? (
+          <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{relationError}</div>
+        ) : null}
         {activeTab === 'props' && propError ? (
           <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{propError}</div>
         ) : null}
@@ -546,6 +626,15 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
               onAddProp={(draft) => void handleAddProp(draft)}
               onUpdateProp={(id, draft) => void handleUpdateProp(id, draft)}
               onDeleteProp={(id, name) => void handleDeleteProp(id, name)}
+            />
+          )}
+
+          {activeTab === 'relations' && (
+            <CharacterRelationGraphPanel
+              characters={projectCharacters.map((item) => ({ id: item.id, name: item.name, thumbnail: item.thumbnail }))}
+              relations={projectCharacterRelations}
+              generating={relationGenerating}
+              onGenerate={() => void handleGenerateCharacterRelations()}
             />
           )}
 

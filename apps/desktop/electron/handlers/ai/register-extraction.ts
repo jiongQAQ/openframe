@@ -6,6 +6,7 @@ import { resolveTextModel } from './model'
 import {
   CHARACTER_AGE_CANONICAL_PROMPT,
   CharacterExtractRow,
+  CharacterRelationExtractRow,
   PropExtractRow,
   SceneExtractRow,
   ShotExtractRow,
@@ -13,6 +14,7 @@ import {
   normalizeCharacterAge,
   normalizeCharacterGender,
   parseCharacters,
+  parseCharacterRelations,
   parseProps,
   parseScenes,
   parseShots,
@@ -152,6 +154,48 @@ export function registerAIExtractionHandlers() {
       try {
         const { text } = await generateText({ model, prompt })
         return { ok: true, props: parseProps(text) }
+      } catch (err: unknown) {
+        return { ok: false, error: shortError(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ai:extractCharacterRelationsFromScript',
+    async (
+      _event,
+      params: {
+        script: string
+        characters: Array<{ id: string; name: string; personality?: string; background?: string }>
+        modelKey?: string
+      },
+    ): Promise<{ ok: true; relations: CharacterRelationExtractRow[] } | { ok: false; error: string }> => {
+      const config = store.get('ai_config') as AIConfig
+      const model = resolveTextModel(config, params.modelKey)
+      if (!model) return { ok: false, error: 'No default text model configured.' }
+
+      if (!Array.isArray(params.characters) || params.characters.length < 2) {
+        return { ok: true, relations: [] }
+      }
+
+      const prompt = [
+        'You are a screenplay relationship analyst.',
+        'Extract project-level character relationships from the script.',
+        'Each relationship must use only IDs from the provided character list.',
+        'No invented characters or IDs. No self-relations.',
+        'strength must be an integer from 1 to 5, where 5 is the strongest tie/conflict.',
+        'Return STRICT JSON only with shape:',
+        '{"relations":[{"source_ref":"","target_ref":"","relation_type":"","strength":3,"notes":"","evidence":""}]}',
+        'relation_type examples: family, ally, friend, rival, enemy, mentor, subordinate, lover, business, mystery.',
+        'notes should be concise relationship summary; evidence should mention key script clue.',
+        'Do not include markdown code fences.',
+        `Characters:\n${JSON.stringify(params.characters)}`,
+        `Script:\n${params.script}`,
+      ].join('\n\n')
+
+      try {
+        const { text } = await generateText({ model, prompt })
+        return { ok: true, relations: parseCharacterRelations(text) }
       } catch (err: unknown) {
         return { ok: false, error: shortError(err) }
       }

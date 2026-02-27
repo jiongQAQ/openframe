@@ -24,6 +24,7 @@ const MIGRATIONS_DIR = app.isPackaged
 const SHOTS_PRODUCTION_COLUMNS_MIGRATION_MILLIS = 1771982985060
 const PROPS_TABLE_CREATE_MIGRATION_MILLIS = 1772154932545
 const SHOTS_PROP_IDS_MIGRATION_MILLIS = 1772156051044
+const CHARACTER_RELATIONS_TABLE_CREATE_MIGRATION_MILLIS = 1772159861848
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null
 let _sqlite: InstanceType<typeof Database> | null = null
@@ -49,6 +50,11 @@ function isShotsPropIdsMigrationConflict(error: unknown): boolean {
     && /shots/i.test(message)
     && (/ALTER TABLE/i.test(message) || /duplicate column/i.test(message) || /NOT NULL/i.test(message))
   )
+}
+
+function isCharacterRelationsTableCreateMigrationConflict(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /CREATE TABLE\s+[`"]?character_relations[`"]?/i.test(message)
 }
 
 function ensureShotsProductionColumns(raw: InstanceType<typeof Database>): void {
@@ -98,6 +104,34 @@ function ensurePropsTableColumns(raw: InstanceType<typeof Database>): void {
   }
 }
 
+function ensureCharacterRelationsTableColumns(raw: InstanceType<typeof Database>): void {
+  const tableExists = raw
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .get('character_relations')
+  if (!tableExists) return
+
+  const columns = raw.prepare("PRAGMA table_info('character_relations')").all() as Array<{ name: string }>
+  const names = new Set(columns.map((column) => column.name))
+
+  if (!names.has('relation_type')) {
+    raw.exec("ALTER TABLE character_relations ADD COLUMN relation_type text NOT NULL DEFAULT ''")
+  }
+  if (!names.has('strength')) {
+    raw.exec('ALTER TABLE character_relations ADD COLUMN strength integer NOT NULL DEFAULT 3')
+  }
+  if (!names.has('notes')) {
+    raw.exec("ALTER TABLE character_relations ADD COLUMN notes text NOT NULL DEFAULT ''")
+  }
+  if (!names.has('evidence')) {
+    raw.exec("ALTER TABLE character_relations ADD COLUMN evidence text NOT NULL DEFAULT ''")
+  }
+
+  raw.exec('UPDATE character_relations SET strength = 3 WHERE strength IS NULL')
+  raw.exec("UPDATE character_relations SET relation_type = '' WHERE relation_type IS NULL")
+  raw.exec("UPDATE character_relations SET notes = '' WHERE notes IS NULL")
+  raw.exec("UPDATE character_relations SET evidence = '' WHERE evidence IS NULL")
+}
+
 function markMigrationApplied(raw: InstanceType<typeof Database>, createdAt: number, hash: string): void {
   raw.exec(`
     CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
@@ -132,6 +166,11 @@ function recoverShotsPropIdsMigrationConflict(raw: InstanceType<typeof Database>
   markMigrationApplied(raw, SHOTS_PROP_IDS_MIGRATION_MILLIS, 'manual_hotfix_0012_shots_prop_ids')
 }
 
+function recoverCharacterRelationsMigrationConflict(raw: InstanceType<typeof Database>): void {
+  ensureCharacterRelationsTableColumns(raw)
+  markMigrationApplied(raw, CHARACTER_RELATIONS_TABLE_CREATE_MIGRATION_MILLIS, 'manual_hotfix_0013_character_relations_table_exists')
+}
+
 export function getDb() {
   if (!_db) {
     const DB_DIR = getDataDir()
@@ -151,6 +190,8 @@ export function getDb() {
         recoverPropsMigrationConflict(_sqlite)
       } else if (isShotsPropIdsMigrationConflict(error)) {
         recoverShotsPropIdsMigrationConflict(_sqlite)
+      } else if (isCharacterRelationsTableCreateMigrationConflict(error)) {
+        recoverCharacterRelationsMigrationConflict(_sqlite)
       } else {
         throw error
       }

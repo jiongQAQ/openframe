@@ -46,6 +46,18 @@ export const props = sqliteTable('props', {
   created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
 
+export const character_relations = sqliteTable('character_relations', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').notNull(),
+  source_character_id: text('source_character_id').notNull(),
+  target_character_id: text('target_character_id').notNull(),
+  relation_type: text('relation_type').notNull().$default(() => ''),
+  strength: integer('strength').notNull().$default(() => 3),
+  notes: text('notes').notNull().$default(() => ''),
+  evidence: text('evidence').notNull().$default(() => ''),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
+
 export const scenes = sqliteTable('scenes', {
   id: text('id').primaryKey(),
   project_id: text('project_id').notNull(),

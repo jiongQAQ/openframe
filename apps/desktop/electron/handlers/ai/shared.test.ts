@@ -5,6 +5,7 @@ import {
   normalizeCharacterAge,
   normalizeCharacterGender,
   parseCharacters,
+  parseCharacterRelations,
   parseProps,
   parseScenes,
   parseShots,
@@ -130,6 +131,68 @@ describe('ai shared utilities', () => {
         name: 'Longsword',
         category: 'Weapon',
         description: 'forged steel blade',
+      },
+    ])
+  })
+
+  it('parses character relations with normalization, filtering and dedup', () => {
+    const rows = parseCharacterRelations(
+      JSON.stringify({
+        relations: [
+          {
+            source_ref: ' c1 ',
+            target_ref: ' c2 ',
+            relation_type: ' Rival ',
+            strength: '4.4',
+            notes: ' long-term conflict ',
+            evidence: ' they accuse each other ',
+          },
+          {
+            source_ref: 'c1',
+            target_ref: 'c2',
+            relation_type: 'rival',
+            strength: 5,
+            notes: 'duplicate should be removed',
+            evidence: 'duplicate',
+          },
+          {
+            source_ref: 'c3',
+            target_ref: 'c3',
+            relation_type: 'self',
+            strength: 2,
+          },
+          {
+            source_ref: '',
+            target_ref: 'c4',
+            relation_type: 'ally',
+            strength: 2,
+          },
+          {
+            source_ref: 'c2',
+            target_ref: 'c4',
+            relation_type: 'ally',
+            strength: '10',
+          },
+        ],
+      }),
+    )
+
+    expect(rows).toEqual([
+      {
+        source_ref: 'c1',
+        target_ref: 'c2',
+        relation_type: 'Rival',
+        strength: 4,
+        notes: 'long-term conflict',
+        evidence: 'they accuse each other',
+      },
+      {
+        source_ref: 'c2',
+        target_ref: 'c4',
+        relation_type: 'ally',
+        strength: 5,
+        notes: '',
+        evidence: '',
       },
     ])
   })

@@ -31,6 +31,7 @@
     "@tiptap/starter-kit": "^3.20.0",
     "ai": "^6.0.97",
     "better-sqlite3": "^12.6.2",
+    "cytoscape": "^3.33.1",
     "drizzle-orm": "^0.45.1",
     "electron-store": "^11.0.2",
     "i18next": "^25.8.13",

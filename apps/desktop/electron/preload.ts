@@ -73,6 +73,17 @@ type CharacterRow = {
   background: string
   created_at: number
 }
+type CharacterRelationRow = {
+  id: string
+  project_id: string
+  source_character_id: string
+  target_character_id: string
+  relation_type: string
+  strength: number
+  notes: string
+  evidence: string
+  created_at: number
+}
 type PropRow = {
   id: string
   project_id: string
@@ -180,6 +191,14 @@ contextBridge.exposeInMainWorld('aiAPI', {
     params: { script: string; modelKey?: string },
   ): Promise<{ ok: true; props: Array<{ name: string; category: string; description: string }> } | { ok: false; error: string }> =>
     ipcRenderer.invoke('ai:extractPropsFromScript', params),
+  extractCharacterRelationsFromScript: (
+    params: {
+      script: string
+      characters: Array<{ id: string; name: string; personality?: string; background?: string }>
+      modelKey?: string
+    },
+  ): Promise<{ ok: true; relations: Array<{ source_ref: string; target_ref: string; relation_type: string; strength: number; notes: string; evidence: string }> } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('ai:extractCharacterRelationsFromScript', params),
   enhanceSceneFromScript: (
     params: {
       script: string
@@ -313,6 +332,16 @@ contextBridge.exposeInMainWorld('charactersAPI', {
   delete: (id: string): Promise<void> => ipcRenderer.invoke('characters:delete', id),
   replaceByProject: (payload: { projectId: string; characters: CharacterRow[] }): Promise<void> =>
     ipcRenderer.invoke('characters:replaceByProject', payload),
+})
+
+contextBridge.exposeInMainWorld('characterRelationsAPI', {
+  getAll: (): Promise<CharacterRelationRow[]> => ipcRenderer.invoke('characterRelations:getAll'),
+  getByProject: (projectId: string): Promise<CharacterRelationRow[]> => ipcRenderer.invoke('characterRelations:getByProject', projectId),
+  insert: (row: CharacterRelationRow): Promise<void> => ipcRenderer.invoke('characterRelations:insert', row),
+  update: (row: CharacterRelationRow): Promise<void> => ipcRenderer.invoke('characterRelations:update', row),
+  delete: (id: string): Promise<void> => ipcRenderer.invoke('characterRelations:delete', id),
+  replaceByProject: (payload: { projectId: string; relations: CharacterRelationRow[] }): Promise<void> =>
+    ipcRenderer.invoke('characterRelations:replaceByProject', payload),
 })
 
 contextBridge.exposeInMainWorld('propsAPI', {

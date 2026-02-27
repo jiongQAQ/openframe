@@ -55,6 +55,17 @@ type CharacterRow = {
   background: string
   created_at: number
 }
+type CharacterRelationRow = {
+  id: string
+  project_id: string
+  source_character_id: string
+  target_character_id: string
+  relation_type: string
+  strength: number
+  notes: string
+  evidence: string
+  created_at: number
+}
 type PropRow = {
   id: string
   project_id: string
@@ -147,6 +158,11 @@ interface Window {
       script: string
       modelKey?: string
     }) => Promise<{ ok: true; props: Array<{ name: string; category: string; description: string }> } | { ok: false; error: string }>
+    extractCharacterRelationsFromScript: (params: {
+      script: string
+      characters: Array<{ id: string; name: string; personality?: string; background?: string }>
+      modelKey?: string
+    }) => Promise<{ ok: true; relations: Array<{ source_ref: string; target_ref: string; relation_type: string; strength: number; notes: string; evidence: string }> } | { ok: false; error: string }>
     enhanceSceneFromScript: (params: {
       script: string
       scene: { title: string; location?: string; time?: string; mood?: string; description?: string; shot_notes?: string }
@@ -235,6 +251,14 @@ interface Window {
     update: (character: CharacterRow) => Promise<void>
     delete: (id: string) => Promise<void>
     replaceByProject: (payload: { projectId: string; characters: CharacterRow[] }) => Promise<void>
+  }
+  characterRelationsAPI: {
+    getAll: () => Promise<CharacterRelationRow[]>
+    getByProject: (projectId: string) => Promise<CharacterRelationRow[]>
+    insert: (row: CharacterRelationRow) => Promise<void>
+    update: (row: CharacterRelationRow) => Promise<void>
+    delete: (id: string) => Promise<void>
+    replaceByProject: (payload: { projectId: string; relations: CharacterRelationRow[] }) => Promise<void>
   }
   propsAPI: {
     getAll: () => Promise<PropRow[]>
