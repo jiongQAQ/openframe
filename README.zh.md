@@ -17,7 +17,14 @@ Openframe 是一个面向短剧/影视创作的桌面应用，覆盖从剧本、
 - 剧本编辑器工具栏支持：
   - 根据想法生成剧本
   - 根据小说片段生成剧本
-- 角色库 / 场景库 / 分镜管理（支持 AI 辅助生成图片）
+- 项目级角色库 / 道具库 / 场景库（支持 AI 工作流）：
+  - 可根据剧本提取并补全道具
+  - 角色支持三视图（正/侧/背）生图
+  - 道具与场景支持三视图设定图生成
+  - 场景卡片展示会按项目比例（`16:9` / `9:16`）自适应
+- 分镜管理与制作工作台：
+  - 分镜可同时关联角色和道具
+  - AI 分镜提取保留 scene/character/prop 关联引用
 - 视频面板（镜头视频生成、合并导出）
 - 导出时间线文件（FCPXML、EDL）
 - 数据面板展示存储占用并支持清理未使用媒体文件
@@ -115,3 +122,9 @@ pnpm -C apps/desktop db:generate
 - `No default text model configured`：在设置页先配置并启用文本模型。
 - 原生依赖构建失败：重新执行 `pnpm install`，确认 `electron-rebuild` 成功。
 - AI 或媒体导出失败：优先检查 Provider 配置、模型可用性、以及本地 FFmpeg/媒体处理依赖状态。
+
+## 12. 发布与 Changelog
+
+- 推送 `v*` 形式的 tag（例如 `v0.7.0`）会触发 Release 工作流。
+- GitHub Actions 会构建 macOS / Windows / Linux 桌面安装包并上传到 GitHub Release。
+- GitHub Release Notes 会自动生成并作为 changelog（见 `.github/workflows/release-build.yml` 的 `generate_release_notes` 配置）。

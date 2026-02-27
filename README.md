@@ -21,8 +21,14 @@ Openframe is a desktop app for AI-assisted short-film production, covering scrip
   - autocomplete
   - generate script from an idea
   - generate script from a novel excerpt
-- Character library and scene library with AI image generation
-- Shot planning and production workspace
+- Character / prop / scene libraries (project-level) with AI workflows:
+  - extract and fill missing props from script
+  - generate character turnaround (front/side/back)
+  - generate prop and scene turnaround sheets (three-view)
+  - scene card layout adapts to project ratio (`16:9` / `9:16`)
+- Shot planning and production workspace:
+  - shot cards can associate both characters and props
+  - AI shot extraction keeps scene/character/prop references
 - Video export (merged video) and timeline export (FCPXML/EDL)
 - Data panel with media size stats and cleanup for unused files
 - Configurable AI providers, including custom providers
@@ -103,3 +109,9 @@ Keep locale files in sync:
 - `No default text model configured`: configure and enable a text model in Settings.
 - Native dependency issues: re-run `pnpm install` and ensure `electron-rebuild` succeeds.
 - AI/export failures: check provider config, model availability, and local media toolchain health.
+
+## 12. Release & Changelog
+
+- Push a tag matching `v*` (for example, `v0.7.0`) to trigger release workflow.
+- GitHub Actions builds desktop packages for macOS / Windows / Linux and uploads artifacts to GitHub Release.
+- GitHub Release Notes are auto-generated as changelog (`generate_release_notes` in `.github/workflows/release-build.yml`).
