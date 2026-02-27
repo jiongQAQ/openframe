@@ -12,6 +12,9 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +63,17 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: ${{ runner.os }}-${{ matrix.target }}-electron-cache-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/electron-builder.json5', 'apps/desktop/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-electron-cache-
+            ${{ runner.os }}-electron-cache-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -73,8 +87,23 @@ jobs:
       - name: Build renderer and electron bundles
         run: pnpm -C apps/desktop exec vite build && pnpm -C apps/desktop exec tsc
 
-      - name: Package for target
-        run: ${{ matrix.build_command }}
+      - name: Package for target (with retry)
+        shell: bash
+        run: |
+          max_attempts=3
+          attempt=1
+          until [ "$attempt" -gt "$max_attempts" ]; do
+            echo "Packaging attempt ${attempt}/${max_attempts}"
+            if eval "${{ matrix.build_command }}"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "Packaging failed after ${max_attempts} attempts"
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 20
+          done
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
