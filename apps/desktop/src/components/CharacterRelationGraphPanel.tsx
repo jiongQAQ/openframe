@@ -69,7 +69,7 @@ export function CharacterRelationGraphPanel({
     const nodes: ElementDefinition[] = characters.map((character) => {
       const degree = relationDegreeById.get(character.id) ?? 0
       const thumb = getThumbnailSrc(character.thumbnail)
-      const size = 40 + Math.min(10, degree * 1.2)
+      const size = 80 + Math.min(10, degree * 1.2)
       const shortName = (character.name || t('projectLibrary.characterDefaultName')).trim()
       const displayName = shortName.length > 8 ? `${shortName.slice(0, 8)}...` : shortName
       return {
@@ -117,8 +117,6 @@ export function CharacterRelationGraphPanel({
               width: 'data(size)',
               height: 'data(size)',
               shape: 'ellipse',
-              'border-width': 1,
-              'border-color': 'rgba(187, 131, 220, 0.55)',
               'background-color': 'rgba(247, 236, 252, 0.78)',
               'background-image': 'data(image)',
               'background-fit': 'cover',
@@ -126,7 +124,7 @@ export function CharacterRelationGraphPanel({
               'background-repeat': 'no-repeat',
               'background-opacity': 1,
               label: 'data(label)',
-              color: '#8a4faf',
+              color: '#333',
               'font-size': 10,
               'font-weight': 500,
               'text-valign': 'bottom',
