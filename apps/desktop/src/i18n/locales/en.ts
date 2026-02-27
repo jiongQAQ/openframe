@@ -196,7 +196,7 @@ export default {
     sceneEnhanceSingle: 'Enhance this scene',
     sceneRefreshSingle: 'Re-extract this scene',
     sceneGenerateAllImages: 'Generate all scene images',
-    sceneGenerateImage: 'Generate scene image',
+    sceneGenerateImage: 'Generate scene turnaround',
     sceneUploadImage: 'Upload scene image',
     sceneNotFoundInScript: 'Scene not found in current script.',
     sceneCreateTitle: 'Create Scene',

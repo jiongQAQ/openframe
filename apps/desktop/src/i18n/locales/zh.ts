@@ -196,7 +196,7 @@ export default {
     sceneEnhanceSingle: '润色当前场景',
     sceneRefreshSingle: '重提当前场景',
     sceneGenerateAllImages: '一键生成场景图片',
-    sceneGenerateImage: '生成场景图',
+    sceneGenerateImage: '生成场景三视图',
     sceneUploadImage: '上传场景图',
     sceneNotFoundInScript: '在当前剧本中未找到该场景。',
     sceneCreateTitle: '新增场景',

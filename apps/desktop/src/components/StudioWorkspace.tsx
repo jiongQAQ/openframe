@@ -1101,10 +1101,10 @@ export function StudioWorkspace({
     setSceneError('')
     try {
       const prompt = [
-        'Cinematic storyboard environment keyframe, high quality, no text watermark.',
+        'Scene turnaround sheet, three-view composition: front view, left 45-degree view, right 45-degree view.',
         'Environment-only scene. No people, no characters, no human silhouettes, no portraits.',
-        'Generate a complete scene composition: clear foreground, midground, background, lighting, atmosphere, and key props.',
-        'Use a wide establishing-shot framing with rich spatial depth and production-ready visual storytelling.',
+        'Keep architecture, props, materials, and lighting style consistent across the three views.',
+        'High quality, production-ready, no text watermark.',
         `Project category: ${projectCategory || 'unknown'}`,
         `Project style: ${projectGenre || 'unknown'}`,
         `Scene title: ${scene.title || 'untitled'}`,
@@ -2250,6 +2250,7 @@ export function StudioWorkspace({
         ) : showScenePanel ? (
           <ScenePanel
             scenes={seriesScenes}
+            projectRatio={projectRatio}
             extractingFromScript={sceneExtractMode === 'merge'}
             extractingRegenerate={sceneExtractMode === 'replace'}
             sceneBusyId={sceneBusyId}

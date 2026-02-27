@@ -366,7 +366,9 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     }
 
     const prompt = [
-      'Cinematic environment storyboard frame, no humans, no text watermark.',
+      'Scene turnaround sheet, three-view composition: front view, left 45-degree view, right 45-degree view.',
+      'Environment-only scene. No people, no characters, no human silhouettes, no portraits, no text watermark.',
+      'Keep architecture, props, materials, and lighting style consistent across the three views.',
       `Project category: ${project?.category || 'unknown'}`,
       `Project style: ${project?.genre || 'unknown'}`,
       `Scene title: ${draft.title || 'unknown'}`,
@@ -558,6 +560,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
               <div className="h-full">
                 <ScenePanel
                   scenes={projectScenes}
+                  projectRatio={project.video_ratio}
                   extractingFromScript={false}
                   extractingRegenerate={false}
                   sceneBusyId={null}

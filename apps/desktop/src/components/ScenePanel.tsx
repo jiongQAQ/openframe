@@ -29,6 +29,7 @@ export type { CreateSceneDraft }
 
 interface ScenePanelProps {
   scenes: SceneCard[]
+  projectRatio?: '16:9' | '9:16'
   extractingFromScript: boolean
   extractingRegenerate: boolean
   sceneBusyId: string | null
@@ -53,6 +54,7 @@ function getThumbnailSrc(value: string | null): string | null {
 
 export function ScenePanel({
   scenes,
+  projectRatio = '16:9',
   extractingFromScript,
   extractingRegenerate,
   sceneBusyId,
@@ -69,6 +71,9 @@ export function ScenePanel({
   generatingAllImages,
 }: ScenePanelProps) {
   const { t } = useTranslation()
+  const cardWidthClass = projectRatio === '9:16' ? 'w-48' : 'w-56'
+  const cardHeightClass = projectRatio === '9:16' ? 'h-112' : 'h-105'
+  const mediaAspectClass = projectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'
   const [editingSceneId, setEditingSceneId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -206,22 +211,24 @@ export function ScenePanel({
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-wrap items-start gap-3 pr-2">
-          <article className="w-56 h-105 shrink-0 rounded-xl border border-dashed border-base-300 bg-base-100/70 flex flex-col items-center justify-center gap-3 text-base-content/75 cursor-pointer hover:border-primary/40 hover:bg-base-100 transition-colors" onClick={handleOpenCreate}>
+          <article className={`${cardWidthClass} ${cardHeightClass} shrink-0 rounded-xl border border-dashed border-base-300 bg-base-100/70 flex flex-col items-center justify-center gap-3 text-base-content/75 cursor-pointer hover:border-primary/40 hover:bg-base-100 transition-colors`} onClick={handleOpenCreate}>
             <PlusCircle size={24} className="text-base-content/55" />
             <p className="text-sm font-medium">{t('projectLibrary.sceneSetup')}</p>
             <p className="text-xs text-base-content/55">{t('projectLibrary.sceneEmptyHint')}</p>
           </article>
 
           {scenes.length === 0 ? (
-            <article className="w-56 h-105 shrink-0 rounded-xl border border-dashed border-base-300 bg-base-100/70 p-4 flex items-center justify-center text-center text-sm text-base-content/60">
+            <article className={`${cardWidthClass} ${cardHeightClass} shrink-0 rounded-xl border border-dashed border-base-300 bg-base-100/70 p-4 flex items-center justify-center text-center text-sm text-base-content/60`}>
               {t('projectLibrary.emptyScenes')}
             </article>
           ) : null}
 
           {scenes.map((scene) => (
-            <article key={scene.id} className="w-56 h-105 shrink-0 rounded-xl border border-base-300 bg-base-100 overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleOpenEdit(scene)}>
-              <div className="h-44 border-b border-base-300 bg-linear-to-b from-base-200 via-base-100 to-base-200/70 flex items-end justify-center">
-                {getThumbnailSrc(scene.thumbnail) ? <img src={getThumbnailSrc(scene.thumbnail)!} alt={scene.title} className="h-full w-full object-cover" /> : <Clapperboard size={38} className="mb-4 text-base-content/50" />}
+            <article key={scene.id} className={`${cardWidthClass} ${cardHeightClass} shrink-0 rounded-xl border border-base-300 bg-base-100 overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow`} onClick={() => handleOpenEdit(scene)}>
+              <div className="border-b border-base-300 bg-linear-to-b from-base-200 via-base-100 to-base-200/70">
+                <div className={`${mediaAspectClass} w-full flex items-center justify-center`}>
+                  {getThumbnailSrc(scene.thumbnail) ? <img src={getThumbnailSrc(scene.thumbnail)!} alt={scene.title} className="h-full w-full object-cover" /> : <Clapperboard size={38} className="text-base-content/50" />}
+                </div>
               </div>
               <div className="p-3 flex-1 min-h-0 flex flex-col">
                 <p className="text-base font-semibold line-clamp-1">{scene.title || t('projectLibrary.sceneCardUntitled')}</p>
@@ -252,7 +259,9 @@ export function ScenePanel({
             <div className="p-4 md:p-5">
               <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] items-start gap-3">
                 <aside className="self-start rounded-xl border border-base-300 bg-linear-to-br from-base-200/90 via-base-100 to-base-200/70 p-3 min-h-0 flex flex-col items-center justify-start gap-3">
-                  {getThumbnailSrc(createDraft.thumbnail) ? <img src={getThumbnailSrc(createDraft.thumbnail)!} alt={createDraft.title || 'scene'} className="h-52 w-full rounded-lg object-cover" /> : <Clapperboard size={48} className="text-base-content/55" />}
+                  <div className={`${mediaAspectClass} w-full max-w-56 rounded-lg overflow-hidden border border-base-300 bg-base-200/60 flex items-center justify-center`}>
+                    {getThumbnailSrc(createDraft.thumbnail) ? <img src={getThumbnailSrc(createDraft.thumbnail)!} alt={createDraft.title || 'scene'} className="h-full w-full object-cover" /> : <Clapperboard size={48} className="text-base-content/55" />}
+                  </div>
                   <p className="text-sm font-medium text-center wrap-break-word">{createDraft.title.trim() || t('projectLibrary.sceneTitleLabel')}</p>
                   <div className="flex flex-col gap-2 w-full max-w-48">
                     <button type="button" className="btn btn-sm btn-outline" onClick={() => createUploadInputRef.current?.click()} disabled={createUploading || createGenerating}><Upload size={14} />{createUploading ? t('projectLibrary.aiStreaming') : t('projectLibrary.characterManualUpload')}</button>
