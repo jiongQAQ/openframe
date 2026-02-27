@@ -161,6 +161,14 @@ interface Window {
     extractCharacterRelationsFromScript: (params: {
       script: string
       characters: Array<{ id: string; name: string; personality?: string; background?: string }>
+      existingRelations?: Array<{
+        source_ref: string
+        target_ref: string
+        relation_type: string
+        strength?: number
+        notes?: string
+        evidence?: string
+      }>
       modelKey?: string
     }) => Promise<{ ok: true; relations: Array<{ source_ref: string; target_ref: string; relation_type: string; strength: number; notes: string; evidence: string }> } | { ok: false; error: string }>
     enhanceSceneFromScript: (params: {
@@ -180,6 +188,14 @@ interface Window {
         shot_notes?: string
       }>
       characters: Array<{ id: string; name: string }>
+      relations?: Array<{
+        source_ref: string
+        target_ref: string
+        relation_type: string
+        strength?: number
+        notes?: string
+        evidence?: string
+      }>
       props: Array<{ id: string; name: string; category?: string; description?: string }>
       modelKey?: string
     }) => Promise<{ ok: true; shots: Array<{ title: string; scene_ref: string; character_refs: string[]; prop_refs: string[]; shot_size: string; camera_angle: string; camera_move: string; duration_sec: number; action: string; dialogue: string }> } | { ok: false; error: string }>

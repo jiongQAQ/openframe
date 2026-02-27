@@ -12,6 +12,7 @@ import { VideoPanel } from './VideoPanel'
 import { ProductionWorkspacePanel, type EditedClipPayload } from './ProductionWorkspacePanel'
 import { seriesCollection } from '../db/series_collection'
 import type { Character } from '../db/characters_collection'
+import type { CharacterRelation } from '../db/character_relations_collection'
 import type { Prop } from '../db/props_collection'
 
 type CharacterGender = Character['gender']
@@ -71,6 +72,9 @@ export function StudioWorkspace({
   const [sceneBusyId, setSceneBusyId] = useState<string | null>(null)
   const [characterError, setCharacterError] = useState('')
   const [projectCharacters, setProjectCharacters] = useState<Character[]>([])
+  const [relationError, setRelationError] = useState('')
+  const [optimizingRelations, setOptimizingRelations] = useState(false)
+  const [projectCharacterRelations, setProjectCharacterRelations] = useState<CharacterRelation[]>([])
   const [propError, setPropError] = useState('')
   const [projectProps, setProjectProps] = useState<Prop[]>([])
   const [sceneError, setSceneError] = useState('')
@@ -111,6 +115,22 @@ export function StudioWorkspace({
       })
       .catch(() => {
         if (active) setProjectCharacters([])
+      })
+
+    return () => {
+      active = false
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    let active = true
+    window.characterRelationsAPI
+      .getByProject(projectId)
+      .then((rows) => {
+        if (active) setProjectCharacterRelations(rows)
+      })
+      .catch(() => {
+        if (active) setProjectCharacterRelations([])
       })
 
     return () => {
@@ -460,6 +480,48 @@ export function StudioWorkspace({
     return next
   }
 
+  function normalizeRelationType(value: string): string {
+    return value.trim().toLowerCase()
+  }
+
+  function buildRelationKey(sourceId: string, targetId: string, relationType: string): string {
+    const source = sourceId.trim()
+    const target = targetId.trim()
+    const type = normalizeRelationType(relationType)
+    if (!source || !target || source === target || !type) return ''
+    return `${source}|${target}|${type}`
+  }
+
+  function mergeCharacterRelations(existing: CharacterRelation[], extracted: CharacterRelation[]): CharacterRelation[] {
+    const next = [...existing]
+    const relationIndex = new Map<string, number>()
+    next.forEach((item, index) => {
+      const key = buildRelationKey(item.source_character_id, item.target_character_id, item.relation_type)
+      if (key) relationIndex.set(key, index)
+    })
+
+    for (const item of extracted) {
+      const key = buildRelationKey(item.source_character_id, item.target_character_id, item.relation_type)
+      if (!key) continue
+      const hitIndex = relationIndex.get(key)
+      if (hitIndex == null) {
+        relationIndex.set(key, next.length)
+        next.push(item)
+        continue
+      }
+
+      const current = next[hitIndex]
+      next[hitIndex] = {
+        ...current,
+        strength: item.strength,
+        notes: item.notes || current.notes,
+        evidence: item.evidence || current.evidence,
+      }
+    }
+
+    return next
+  }
+
   function mergeProps(existing: Prop[], extracted: Prop[]): Prop[] {
     const next = [...existing]
     const nameIndex = new Map<string, number>()
@@ -540,6 +602,66 @@ export function StudioWorkspace({
     const shouldReplace = window.confirm(t('projectLibrary.characterRegenerateConfirm'))
     if (!shouldReplace) return
     await extractCharactersFromScript('replace')
+  }
+
+  function queueOptimizeRelationsFromCurrentScript() {
+    if (projectCharacters.length < 2) {
+      setRelationError(t('projectLibrary.relationNeedCharacters'))
+      return
+    }
+    if (!scriptContent.trim()) {
+      setRelationError(t('projectLibrary.relationNeedScript'))
+      return
+    }
+
+    setRelationError('')
+    setOptimizingRelations(true)
+    enqueueTask(t('projectLibrary.relationOptimizeFromCurrentScript'), async () => {
+      try {
+        const result = await window.aiAPI.extractCharacterRelationsFromScript({
+          script: scriptContent,
+          characters: projectCharacters.map((character) => ({
+            id: character.id,
+            name: character.name,
+            personality: character.personality,
+            background: character.background,
+          })),
+          existingRelations: projectCharacterRelations.map((row) => ({
+            source_ref: row.source_character_id,
+            target_ref: row.target_character_id,
+            relation_type: row.relation_type,
+            strength: row.strength,
+            notes: row.notes,
+            evidence: row.evidence,
+          })),
+          modelKey: selectedTextModelKey || undefined,
+        })
+        if (!result.ok) {
+          setRelationError(result.error)
+          return
+        }
+
+        const extractedRows: CharacterRelation[] = result.relations.map((item, index) => ({
+          id: crypto.randomUUID(),
+          project_id: projectId,
+          source_character_id: item.source_ref,
+          target_character_id: item.target_ref,
+          relation_type: item.relation_type,
+          strength: item.strength,
+          notes: item.notes,
+          evidence: item.evidence,
+          created_at: Date.now() + index,
+        }))
+
+        const nextRows = mergeCharacterRelations(projectCharacterRelations, extractedRows)
+        await window.characterRelationsAPI.replaceByProject({ projectId, relations: nextRows })
+        setProjectCharacterRelations(nextRows)
+      } catch {
+        setRelationError(t('projectLibrary.aiToolkitFailed'))
+      } finally {
+        setOptimizingRelations(false)
+      }
+    })
   }
 
   async function handleDeleteCharacter(id: string, name: string) {
@@ -1331,6 +1453,14 @@ export function StudioWorkspace({
           script: scriptContent,
           scenes: seriesScenes.map((scene) => ({ id: scene.id, title: scene.title })),
           characters: projectCharacters.map((character) => ({ id: character.id, name: character.name })),
+          relations: projectCharacterRelations.map((row) => ({
+            source_ref: row.source_character_id,
+            target_ref: row.target_character_id,
+            relation_type: row.relation_type,
+            strength: row.strength,
+            notes: row.notes,
+            evidence: row.evidence,
+          })),
           props: projectProps.map((prop) => ({
             id: prop.id,
             name: prop.name,
@@ -2212,6 +2342,7 @@ export function StudioWorkspace({
 
       <div className="p-5 flex-1 min-h-0">
         {characterError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{characterError}</div> : null}
+        {relationError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{relationError}</div> : null}
         {propError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{propError}</div> : null}
         {sceneError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{sceneError}</div> : null}
         {shotError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{shotError}</div> : null}
@@ -2313,6 +2444,8 @@ export function StudioWorkspace({
           <ScriptEditor
             content={scriptContent}
             selectedTextModelKey={selectedTextModelKey}
+            generatingRelationsFromScript={optimizingRelations}
+            onGenerateRelationsFromScript={queueOptimizeRelationsFromCurrentScript}
             onContentChange={(nextContent) => {
               if (!seriesId) return
               seriesCollection.update(seriesId, (draft) => {

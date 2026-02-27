@@ -127,9 +127,17 @@ interface ScriptEditorProps {
   content: string
   onContentChange: (content: string) => void
   selectedTextModelKey: string
+  generatingRelationsFromScript?: boolean
+  onGenerateRelationsFromScript?: () => void
 }
 
-export function ScriptEditor({ content, onContentChange, selectedTextModelKey }: ScriptEditorProps) {
+export function ScriptEditor({
+  content,
+  onContentChange,
+  selectedTextModelKey,
+  generatingRelationsFromScript = false,
+  onGenerateRelationsFromScript,
+}: ScriptEditorProps) {
   const { t } = useTranslation()
   const [editorTick, setEditorTick] = useState(0)
   const [aiBusy, setAiBusy] = useState(false)
@@ -670,6 +678,8 @@ export function ScriptEditor({ content, onContentChange, selectedTextModelKey }:
     }
   }, [])
 
+  const aiActionsBusy = aiBusy || Boolean(expandDraft && expandDraft.status === 'streaming')
+
   return (
     <div className="rounded-2xl border border-base-300 bg-base-100/95 shadow-sm overflow-hidden max-w-350 mx-auto h-full flex flex-col">
       <div className="flex flex-wrap items-center justify-center gap-1 border-b border-base-300 p-2.5 bg-base-100">
@@ -688,34 +698,49 @@ export function ScriptEditor({ content, onContentChange, selectedTextModelKey }:
         <div className="w-px h-5 bg-base-300 mx-1" />
         <button
           type="button"
-          className="btn btn-sm btn-outline gap-1.5"
+          className="btn btn-sm btn-ghost btn-square"
           onClick={() => {
             clearAutocompleteTimer()
             void triggerAutocomplete(true)
           }}
-          disabled={aiBusy || Boolean(expandDraft && expandDraft.status === 'streaming')}
+          disabled={aiActionsBusy}
+          title={t('projectLibrary.aiAutocomplete')}
+          aria-label={t('projectLibrary.aiAutocomplete')}
         >
           <Wand2 size={14} />
-          {t('projectLibrary.aiAutocomplete')}
         </button>
         <button
           type="button"
-          className="btn btn-sm btn-outline gap-1.5"
+          className="btn btn-sm btn-ghost btn-square"
           onClick={() => openGenerateDialog('script.from-idea')}
-          disabled={aiBusy || Boolean(expandDraft && expandDraft.status === 'streaming')}
+          disabled={aiActionsBusy}
+          title={t('projectLibrary.aiGenerateFromIdea')}
+          aria-label={t('projectLibrary.aiGenerateFromIdea')}
         >
           <Sparkles size={14} />
-          {t('projectLibrary.aiGenerateFromIdea')}
         </button>
         <button
           type="button"
-          className="btn btn-sm btn-outline gap-1.5"
+          className="btn btn-sm btn-ghost btn-square"
           onClick={() => openGenerateDialog('script.from-novel')}
-          disabled={aiBusy || Boolean(expandDraft && expandDraft.status === 'streaming')}
+          disabled={aiActionsBusy}
+          title={t('projectLibrary.aiGenerateFromNovel')}
+          aria-label={t('projectLibrary.aiGenerateFromNovel')}
         >
           <ScrollText size={14} />
-          {t('projectLibrary.aiGenerateFromNovel')}
         </button>
+        {onGenerateRelationsFromScript ? (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost btn-square"
+            onClick={onGenerateRelationsFromScript}
+            disabled={aiActionsBusy || generatingRelationsFromScript}
+            title={generatingRelationsFromScript ? t('projectLibrary.aiStreaming') : t('projectLibrary.relationOptimizeFromCurrentScript')}
+            aria-label={generatingRelationsFromScript ? t('projectLibrary.aiStreaming') : t('projectLibrary.relationOptimizeFromCurrentScript')}
+          >
+            <Activity size={14} />
+          </button>
+        ) : null}
       </div>
 
       {aiError ? <div className="px-3 py-2 text-xs text-error border-b border-base-300">{aiError}</div> : null}

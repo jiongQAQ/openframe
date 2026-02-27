@@ -195,6 +195,14 @@ contextBridge.exposeInMainWorld('aiAPI', {
     params: {
       script: string
       characters: Array<{ id: string; name: string; personality?: string; background?: string }>
+      existingRelations?: Array<{
+        source_ref: string
+        target_ref: string
+        relation_type: string
+        strength?: number
+        notes?: string
+        evidence?: string
+      }>
       modelKey?: string
     },
   ): Promise<{ ok: true; relations: Array<{ source_ref: string; target_ref: string; relation_type: string; strength: number; notes: string; evidence: string }> } | { ok: false; error: string }> =>
@@ -220,6 +228,14 @@ contextBridge.exposeInMainWorld('aiAPI', {
         shot_notes?: string
       }>
       characters: Array<{ id: string; name: string }>
+      relations?: Array<{
+        source_ref: string
+        target_ref: string
+        relation_type: string
+        strength?: number
+        notes?: string
+        evidence?: string
+      }>
       props: Array<{ id: string; name: string; category?: string; description?: string }>
       modelKey?: string
     },

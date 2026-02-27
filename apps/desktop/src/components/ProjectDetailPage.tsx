@@ -60,8 +60,6 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>('episodes')
   const [saving, setSaving] = useState(false)
   const [characterError, setCharacterError] = useState('')
-  const [relationError, setRelationError] = useState('')
-  const [relationGenerating, setRelationGenerating] = useState(false)
   const [propError, setPropError] = useState('')
   const [sceneError, setSceneError] = useState('')
   const [projectScenes, setProjectScenes] = useState<Scene[]>([])
@@ -212,69 +210,6 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       charactersCollection.delete(id)
     } catch {
       setCharacterError(t('projectLibrary.saveError'))
-    }
-  }
-
-  async function handleGenerateCharacterRelations() {
-    setRelationError('')
-
-    if (projectCharacters.length < 2) {
-      setRelationError(t('projectLibrary.relationNeedCharacters'))
-      return
-    }
-
-    const script = series
-      .map((item) => item.script.trim())
-      .filter(Boolean)
-      .join('\n\n--- Episode Break ---\n\n')
-      .trim()
-
-    if (!script) {
-      setRelationError(t('projectLibrary.relationNeedScript'))
-      return
-    }
-
-    const shouldReplace = window.confirm(t('projectLibrary.relationGenerateConfirm'))
-    if (!shouldReplace) return
-
-    setRelationGenerating(true)
-    try {
-      const result = await window.aiAPI.extractCharacterRelationsFromScript({
-        script,
-        characters: projectCharacters.map((item) => ({
-          id: item.id,
-          name: item.name,
-          personality: item.personality,
-          background: item.background,
-        })),
-      })
-      if (!result.ok) {
-        setRelationError(result.error)
-        return
-      }
-
-      const nextRows = result.relations.map((item, index) => ({
-        id: crypto.randomUUID(),
-        project_id: projectId,
-        source_character_id: item.source_ref,
-        target_character_id: item.target_ref,
-        relation_type: item.relation_type,
-        strength: item.strength,
-        notes: item.notes,
-        evidence: item.evidence,
-        created_at: Date.now() + index,
-      }))
-
-      for (const row of projectCharacterRelations) {
-        characterRelationsCollection.delete(row.id)
-      }
-      for (const row of nextRows) {
-        characterRelationsCollection.insert(row)
-      }
-    } catch {
-      setRelationError(t('projectLibrary.aiToolkitFailed'))
-    } finally {
-      setRelationGenerating(false)
     }
   }
 
@@ -541,9 +476,6 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         {activeTab === 'characters' && characterError ? (
           <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{characterError}</div>
         ) : null}
-        {activeTab === 'relations' && relationError ? (
-          <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{relationError}</div>
-        ) : null}
         {activeTab === 'props' && propError ? (
           <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{propError}</div>
         ) : null}
@@ -633,8 +565,6 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
             <CharacterRelationGraphPanel
               characters={projectCharacters.map((item) => ({ id: item.id, name: item.name, thumbnail: item.thumbnail }))}
               relations={projectCharacterRelations}
-              generating={relationGenerating}
-              onGenerate={() => void handleGenerateCharacterRelations()}
             />
           )}
 

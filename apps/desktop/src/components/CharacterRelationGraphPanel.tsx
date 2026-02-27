@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { Network, Plus, Minus, Scan, Sparkles } from 'lucide-react'
+import { Network, Plus, Minus, Scan } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import cytoscape, { type Core, type ElementDefinition } from 'cytoscape'
 import type { CharacterRelation } from '../db/character_relations_collection'
@@ -13,8 +13,6 @@ type CharacterOption = {
 interface CharacterRelationGraphPanelProps {
   characters: CharacterOption[]
   relations: CharacterRelation[]
-  generating: boolean
-  onGenerate: () => void
 }
 
 function clampStrength(value: number): number {
@@ -40,8 +38,6 @@ function getThumbnailSrc(value: string | null): string | null {
 export function CharacterRelationGraphPanel({
   characters,
   relations,
-  generating,
-  onGenerate,
 }: CharacterRelationGraphPanelProps) {
   const { t } = useTranslation()
   const graphContainerRef = useRef<HTMLDivElement | null>(null)
@@ -238,15 +234,6 @@ export function CharacterRelationGraphPanel({
           </button>
           <button type="button" className="btn btn-xs btn-ghost" onClick={() => void handleZoomFit()} title={t('projectLibrary.relationZoomFit')}>
             <Scan size={13} />
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-outline"
-            onClick={onGenerate}
-            disabled={generating || characters.length < 2}
-          >
-            <Sparkles size={12} />
-            {generating ? t('projectLibrary.aiStreaming') : t('projectLibrary.relationGenerateFromScript')}
           </button>
         </div>
       </div>

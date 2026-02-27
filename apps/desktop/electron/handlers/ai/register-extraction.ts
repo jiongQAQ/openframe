@@ -167,6 +167,14 @@ export function registerAIExtractionHandlers() {
       params: {
         script: string
         characters: Array<{ id: string; name: string; personality?: string; background?: string }>
+        existingRelations?: Array<{
+          source_ref: string
+          target_ref: string
+          relation_type: string
+          strength?: number
+          notes?: string
+          evidence?: string
+        }>
         modelKey?: string
       },
     ): Promise<{ ok: true; relations: CharacterRelationExtractRow[] } | { ok: false; error: string }> => {
@@ -178,9 +186,35 @@ export function registerAIExtractionHandlers() {
         return { ok: true, relations: [] }
       }
 
+      const existingRelations = Array.isArray(params.existingRelations)
+        ? params.existingRelations
+          .map((item) => {
+            const strengthValue =
+              typeof item.strength === 'number'
+                ? item.strength
+                : typeof item.strength === 'string'
+                  ? Number(item.strength)
+                  : 3
+            const strength = Number.isFinite(strengthValue)
+              ? Math.max(1, Math.min(5, Math.round(strengthValue)))
+              : 3
+            return {
+              source_ref: toText(item.source_ref).trim(),
+              target_ref: toText(item.target_ref).trim(),
+              relation_type: toText(item.relation_type).trim(),
+              strength,
+              notes: toText(item.notes).trim(),
+              evidence: toText(item.evidence).trim(),
+            }
+          })
+          .filter((row) => row.source_ref && row.target_ref && row.source_ref !== row.target_ref)
+        : []
+
       const prompt = [
         'You are a screenplay relationship analyst.',
         'Extract project-level character relationships from the script.',
+        'When existing relations are provided, treat them as baseline and optimize them with script evidence.',
+        'Prefer updating existing links (type, strength, notes, evidence) before adding new links.',
         'Each relationship must use only IDs from the provided character list.',
         'No invented characters or IDs. No self-relations.',
         'strength must be an integer from 1 to 5, where 5 is the strongest tie/conflict.',
@@ -190,6 +224,7 @@ export function registerAIExtractionHandlers() {
         'notes should be concise relationship summary; evidence should mention key script clue.',
         'Do not include markdown code fences.',
         `Characters:\n${JSON.stringify(params.characters)}`,
+        `Existing relations:\n${JSON.stringify(existingRelations)}`,
         `Script:\n${params.script}`,
       ].join('\n\n')
 
@@ -271,6 +306,14 @@ export function registerAIExtractionHandlers() {
           shot_notes?: string
         }>
         characters: Array<{ id: string; name: string }>
+        relations?: Array<{
+          source_ref: string
+          target_ref: string
+          relation_type: string
+          strength?: number
+          notes?: string
+          evidence?: string
+        }>
         props: Array<{ id: string; name: string; category?: string; description?: string }>
         modelKey?: string
       },
@@ -278,6 +321,30 @@ export function registerAIExtractionHandlers() {
       const config = store.get('ai_config') as AIConfig
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
+
+      const relations = Array.isArray(params.relations)
+        ? params.relations
+          .map((item) => {
+            const strengthValue =
+              typeof item.strength === 'number'
+                ? item.strength
+                : typeof item.strength === 'string'
+                  ? Number(item.strength)
+                  : 3
+            const strength = Number.isFinite(strengthValue)
+              ? Math.max(1, Math.min(5, Math.round(strengthValue)))
+              : 3
+            return {
+              source_ref: toText(item.source_ref).trim(),
+              target_ref: toText(item.target_ref).trim(),
+              relation_type: toText(item.relation_type).trim(),
+              strength,
+              notes: toText(item.notes).trim(),
+              evidence: toText(item.evidence).trim(),
+            }
+          })
+          .filter((row) => row.source_ref && row.target_ref && row.source_ref !== row.target_ref)
+        : []
 
       const prompt = [
         'You are a screenplay storyboard planner.',
@@ -292,6 +359,9 @@ export function registerAIExtractionHandlers() {
         'Avoid disconnected or repetitive shots that do not advance the beat from the previous shot.',
         'Continuity detail must be very strong: adjacent shots should read like consecutive moments in the same ongoing action unless the script explicitly jumps.',
         'Keep action text specific and stateful, inheriting important props/poses/positions from prior shots when applicable.',
+        'Character relations are soft guidance only, not hard constraints.',
+        'Use relations to bias pairings, shot contrast, and emotional framing when script evidence allows.',
+        'Never override explicit script actions, chronology, or participant list just to match relations.',
         'Each shot must include scene_ref, character_refs, and prop_refs, using ONLY provided IDs.',
         'Do not invent new scene_ref / character_refs / prop_refs values.',
         'Return STRICT JSON only with shape:',
@@ -301,6 +371,7 @@ export function registerAIExtractionHandlers() {
         'Do not include markdown code fences.',
         `Scenes:\n${JSON.stringify(params.scenes)}`,
         `Characters:\n${JSON.stringify(params.characters)}`,
+        `Character relations:\n${JSON.stringify(relations)}`,
         `Props:\n${JSON.stringify(params.props)}`,
         `Script:\n${params.script}`,
       ].join('\n\n')
