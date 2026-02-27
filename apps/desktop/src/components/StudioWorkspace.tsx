@@ -5,12 +5,14 @@ import { getSelectableModelsByType, type AIConfig } from '@openframe/providers'
 import PQueue from 'p-queue'
 import { ScriptEditor } from './ScriptEditor'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
+import { PropPanel, type CreatePropDraft } from './PropPanel'
 import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
 import { ShotPanel, type ShotCard, type ShotDraft } from './ShotPanel'
 import { VideoPanel } from './VideoPanel'
 import { ProductionWorkspacePanel, type EditedClipPayload } from './ProductionWorkspacePanel'
 import { seriesCollection } from '../db/series_collection'
 import type { Character } from '../db/characters_collection'
+import type { Prop } from '../db/props_collection'
 
 type CharacterGender = Character['gender']
 type CharacterAge = Character['age']
@@ -60,18 +62,23 @@ export function StudioWorkspace({
   scriptContent,
 }: StudioWorkspaceProps) {
   const { t } = useTranslation()
-  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'storyboard' | 'shot' | 'production' | 'export'>('script')
+  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'prop' | 'storyboard' | 'shot' | 'production' | 'export'>('script')
   const [extractMode, setExtractMode] = useState<'merge' | 'replace' | null>(null)
+  const [propExtractMode, setPropExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [sceneExtractMode, setSceneExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [characterBusyId, setCharacterBusyId] = useState<string | null>(null)
+  const [propBusyId, setPropBusyId] = useState<string | null>(null)
   const [sceneBusyId, setSceneBusyId] = useState<string | null>(null)
   const [characterError, setCharacterError] = useState('')
   const [projectCharacters, setProjectCharacters] = useState<Character[]>([])
+  const [propError, setPropError] = useState('')
+  const [projectProps, setProjectProps] = useState<Prop[]>([])
   const [sceneError, setSceneError] = useState('')
   const [seriesScenes, setSeriesScenes] = useState<Scene[]>([])
   const [shotError, setShotError] = useState('')
   const [seriesShots, setSeriesShots] = useState<ShotCard[]>([])
   const [generatingCharacterImages, setGeneratingCharacterImages] = useState(false)
+  const [generatingPropImages, setGeneratingPropImages] = useState(false)
   const [generatingSceneImages, setGeneratingSceneImages] = useState(false)
   const [generatingShotsFromScript, setGeneratingShotsFromScript] = useState(false)
   const [generatingShotImages, setGeneratingShotImages] = useState(false)
@@ -104,6 +111,22 @@ export function StudioWorkspace({
       })
       .catch(() => {
         if (active) setProjectCharacters([])
+      })
+
+    return () => {
+      active = false
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    let active = true
+    window.propsAPI
+      .getByProject(projectId)
+      .then((rows) => {
+        if (active) setProjectProps(rows)
+      })
+      .catch(() => {
+        if (active) setProjectProps([])
       })
 
     return () => {
@@ -227,6 +250,7 @@ export function StudioWorkspace({
     () => [
       { key: 'script', label: t('projectLibrary.stepScript') },
       { key: 'character', label: t('projectLibrary.stepCharacter') },
+      { key: 'prop', label: t('projectLibrary.stepProp') },
       { key: 'storyboard', label: t('projectLibrary.stepStoryboard') },
       { key: 'shot', label: t('projectLibrary.stepShot') },
       { key: 'production', label: t('projectLibrary.stepProduction') },
@@ -236,6 +260,7 @@ export function StudioWorkspace({
   )
 
   const showCharacterPanel = activeStep === 'character'
+  const showPropPanel = activeStep === 'prop'
   const showScenePanel = activeStep === 'storyboard'
   const showShotPanel = activeStep === 'shot'
   const showVideoPanel = activeStep === 'production'
@@ -257,6 +282,10 @@ export function StudioWorkspace({
   )
 
   function normalizeCharacterName(name: string): string {
+    return name.trim().toLowerCase()
+  }
+
+  function normalizePropName(name: string): string {
     return name.trim().toLowerCase()
   }
 
@@ -425,6 +454,35 @@ export function StudioWorkspace({
         personality: current.personality || item.personality,
         appearance: current.appearance || item.appearance,
         background: current.background || item.background,
+      }
+    }
+
+    return next
+  }
+
+  function mergeProps(existing: Prop[], extracted: Prop[]): Prop[] {
+    const next = [...existing]
+    const nameIndex = new Map<string, number>()
+    next.forEach((item, index) => {
+      const key = normalizePropName(item.name)
+      if (key) nameIndex.set(key, index)
+    })
+
+    for (const item of extracted) {
+      const key = normalizePropName(item.name)
+      if (!key) continue
+      const hitIndex = nameIndex.get(key)
+      if (hitIndex == null) {
+        nameIndex.set(key, next.length)
+        next.push(item)
+        continue
+      }
+
+      const current = next[hitIndex]
+      next[hitIndex] = {
+        ...current,
+        category: current.category || item.category,
+        description: current.description || item.description,
       }
     }
 
@@ -658,6 +716,188 @@ export function StudioWorkspace({
           remaining -= 1
           if (remaining <= 0) {
             setGeneratingCharacterImages(false)
+          }
+        }
+      }, 'media')
+    }
+  }
+
+  async function extractPropsFromScript(mode: 'merge' | 'replace') {
+    if (!scriptContent.trim()) {
+      setPropError(t('projectLibrary.aiEditorEmpty'))
+      return
+    }
+
+    setPropExtractMode(mode)
+    setPropError('')
+    enqueueTask(mode === 'replace' ? t('projectLibrary.propRegenerate') : t('projectLibrary.propFromDraft'), async () => {
+      try {
+        const result = await window.aiAPI.extractPropsFromScript({
+          script: scriptContent,
+          modelKey: selectedTextModelKey || undefined,
+        })
+        if (!result.ok) {
+          setPropError(result.error)
+          return
+        }
+
+        const extractedRows: Prop[] = result.props.map((item, index) => ({
+          id: crypto.randomUUID(),
+          project_id: projectId,
+          name: item.name,
+          category: item.category,
+          description: item.description,
+          thumbnail: null,
+          created_at: Date.now() + index,
+        }))
+
+        const nextRows = mode === 'replace' ? extractedRows : mergeProps(projectProps, extractedRows)
+        await window.propsAPI.replaceByProject({ projectId, props: nextRows })
+        setProjectProps(nextRows)
+      } catch {
+        setPropError(t('projectLibrary.aiToolkitFailed'))
+      } finally {
+        setPropExtractMode(null)
+      }
+    })
+  }
+
+  async function handleExtractPropsFromScript() {
+    await extractPropsFromScript('merge')
+  }
+
+  async function handleRegeneratePropsFromScript() {
+    const shouldReplace = window.confirm(t('projectLibrary.propRegenerateConfirm'))
+    if (!shouldReplace) return
+    await extractPropsFromScript('replace')
+  }
+
+  async function persistProp(nextProp: Prop) {
+    await window.propsAPI.update(nextProp)
+    setProjectProps((prev) => prev.map((item) => (item.id === nextProp.id ? nextProp : item)))
+  }
+
+  async function handleDeleteProp(id: string, name: string) {
+    setPropError('')
+    const shouldDelete = window.confirm(
+      t('projectLibrary.propDeleteConfirm', {
+        name: name || t('projectLibrary.propDefaultName'),
+      }),
+    )
+    if (!shouldDelete) return
+
+    try {
+      await window.propsAPI.delete(id)
+      setProjectProps((prev) => prev.filter((item) => item.id !== id))
+    } catch {
+      setPropError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleAddProp(draft: CreatePropDraft) {
+    if (!projectId) return
+    setPropError('')
+    const row: Prop = {
+      id: crypto.randomUUID(),
+      project_id: projectId,
+      name: draft.name,
+      category: draft.category,
+      description: draft.description,
+      thumbnail: draft.thumbnail,
+      created_at: Date.now(),
+    }
+
+    try {
+      await window.propsAPI.insert(row)
+      setProjectProps((prev) => [...prev, row])
+    } catch {
+      setPropError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleUpdateProp(id: string, draft: CreatePropDraft) {
+    const current = projectProps.find((item) => item.id === id)
+    if (!current) return
+    setPropError('')
+    try {
+      await persistProp({
+        ...current,
+        ...draft,
+      })
+    } catch {
+      setPropError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleGeneratePropTurnaround(id: string) {
+    const prop = projectProps.find((item) => item.id === id)
+    if (!prop) return
+
+    setPropBusyId(id)
+    setPropError('')
+    try {
+      const prompt = [
+        'Prop turnaround sheet, front view, side view, back view, consistent material and shape.',
+        'Clean studio lighting, white background, concept art style, high detail, no text watermark.',
+        `Project category: ${projectCategory || 'unknown'}`,
+        `Project style: ${projectGenre || 'unknown'}`,
+        `Prop name: ${prop.name || 'unknown'}`,
+        `Category: ${prop.category || 'unknown'}`,
+        `Description: ${prop.description || 'unknown'}`,
+      ].join('\n')
+
+      const result = await window.aiAPI.generateImage({
+        prompt,
+        modelKey: selectedImageModelKey || undefined,
+        options: { ratio: projectRatio },
+      })
+      if (!result.ok) {
+        setPropError(result.error)
+        return
+      }
+
+      const bytes = new Uint8Array(result.data)
+      const ext = extFromMediaType(result.mediaType)
+      const savedPath = await window.thumbnailsAPI.save(bytes, ext)
+
+      await persistProp({
+        ...prop,
+        thumbnail: savedPath,
+      })
+    } catch {
+      setPropError(t('projectLibrary.aiToolkitFailed'))
+    } finally {
+      setPropBusyId(null)
+    }
+  }
+
+  function queueGeneratePropImage(id: string) {
+    const prop = projectProps.find((item) => item.id === id)
+    const taskTitle = `${t('projectLibrary.propGenerateTurnaround')} · ${prop?.name || t('projectLibrary.propPanelTitle')}`
+    enqueueTask(taskTitle, async () => {
+      await handleGeneratePropTurnaround(id)
+    }, 'media')
+  }
+
+  async function generateAllPropImages() {
+    if (!projectProps.length) {
+      setPropError(t('projectLibrary.propEmptyHint'))
+      return
+    }
+
+    setGeneratingPropImages(true)
+    setPropError('')
+
+    let remaining = projectProps.length
+    for (const prop of [...projectProps]) {
+      const taskTitle = `${t('projectLibrary.propGenerateTurnaround')} · ${prop.name || t('projectLibrary.propPanelTitle')}`
+      enqueueTask(taskTitle, async () => {
+        try {
+          await handleGeneratePropTurnaround(prop.id)
+        } finally {
+          remaining -= 1
+          if (remaining <= 0) {
+            setGeneratingPropImages(false)
           }
         }
       }, 'media')
@@ -944,11 +1184,16 @@ export function StudioWorkspace({
     shot: ShotCard | undefined,
     sceneMap: Map<string, Scene>,
     characterMap: Map<string, Character>,
+    propMap: Map<string, Prop>,
   ): string {
     if (!shot) return 'none'
     const shotScene = sceneMap.get(shot.scene_id)
     const shotCharacters = shot.character_ids
       .map((id) => characterMap.get(id)?.name)
+      .filter(Boolean)
+      .join(', ') || 'none'
+    const shotProps = shot.prop_ids
+      .map((id) => propMap.get(id)?.name)
       .filter(Boolean)
       .join(', ') || 'none'
     return [
@@ -959,6 +1204,7 @@ export function StudioWorkspace({
       `Move=${shot.camera_move || 'unknown'}`,
       `Action=${shot.action || 'unknown'}`,
       `Characters=${shotCharacters}`,
+      `Props=${shotProps}`,
     ].join(' | ')
   }
 
@@ -966,19 +1212,23 @@ export function StudioWorkspace({
     shot: ShotCard
     scene: Scene | undefined
     characterNames: string
+    propNames: string
     previousShot: ShotCard | undefined
     nextShot: ShotCard | undefined
     sceneMap: Map<string, Scene>
     characterMap: Map<string, Character>
+    propMap: Map<string, Prop>
   }): string {
     const {
       shot,
       scene,
       characterNames,
+      propNames,
       previousShot,
       nextShot,
       sceneMap,
       characterMap,
+      propMap,
     } = params
 
     return [
@@ -999,8 +1249,9 @@ export function StudioWorkspace({
       `Time: ${scene?.time || 'unknown'}`,
       `Mood: ${scene?.mood || 'unknown'}`,
       characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
-      `Previous shot context: ${formatShotContextLine(previousShot, sceneMap, characterMap)}`,
-      `Next shot context: ${formatShotContextLine(nextShot, sceneMap, characterMap)}`,
+      propNames ? `Props in shot: ${propNames}` : 'Props in shot: none',
+      `Previous shot context: ${formatShotContextLine(previousShot, sceneMap, characterMap, propMap)}`,
+      `Next shot context: ${formatShotContextLine(nextShot, sceneMap, characterMap, propMap)}`,
     ].join('\n')
   }
 
@@ -1080,6 +1331,12 @@ export function StudioWorkspace({
           script: scriptContent,
           scenes: seriesScenes.map((scene) => ({ id: scene.id, title: scene.title })),
           characters: projectCharacters.map((character) => ({ id: character.id, name: character.name })),
+          props: projectProps.map((prop) => ({
+            id: prop.id,
+            name: prop.name,
+            category: prop.category,
+            description: prop.description,
+          })),
           modelKey: selectedTextModelKey || undefined,
         })
 
@@ -1100,6 +1357,7 @@ export function StudioWorkspace({
           action: shot.action,
           dialogue: shot.dialogue,
           character_ids: shot.character_refs,
+          prop_ids: shot.prop_refs,
           shot_index: index + 1,
           thumbnail: null,
           production_first_frame: null,
@@ -1130,6 +1388,7 @@ export function StudioWorkspace({
 
     const sceneMap = new Map(seriesScenes.map((scene) => [scene.id, scene]))
     const characterMap = new Map(projectCharacters.map((character) => [character.id, character]))
+    const propMap = new Map(projectProps.map((prop) => [prop.id, prop]))
     const shotsToGenerate = [...seriesShots].sort((a, b) => a.shot_index - b.shot_index || a.created_at - b.created_at)
     const shotOrder = new Map(shotsToGenerate.map((shot, index) => [shot.id, index]))
 
@@ -1144,6 +1403,10 @@ export function StudioWorkspace({
         .map((id) => characterMap.get(id)?.name)
         .filter(Boolean)
         .join(', ')
+      const propNames = shot.prop_ids
+        .map((id) => propMap.get(id)?.name)
+        .filter(Boolean)
+        .join(', ')
 
       const referenceImages: string[] = []
       const sceneRef = await readThumbnailAsBase64(scene?.thumbnail ?? null)
@@ -1152,15 +1415,21 @@ export function StudioWorkspace({
         const cref = await readThumbnailAsBase64(characterMap.get(cid)?.thumbnail ?? null)
         if (cref) referenceImages.push(cref)
       }
+      for (const pid of shot.prop_ids.slice(0, 3)) {
+        const pref = await readThumbnailAsBase64(propMap.get(pid)?.thumbnail ?? null)
+        if (pref) referenceImages.push(pref)
+      }
 
       const prompt = buildShotImagePrompt({
         shot,
         scene,
         characterNames,
+        propNames,
         previousShot,
         nextShot,
         sceneMap,
         characterMap,
+        propMap,
       })
 
       const result = await window.aiAPI.generateImage({
@@ -1227,9 +1496,14 @@ export function StudioWorkspace({
         : undefined
       const sceneMap = new Map(seriesScenes.map((scene) => [scene.id, scene]))
       const characterMap = new Map(projectCharacters.map((character) => [character.id, character]))
+      const propMap = new Map(projectProps.map((prop) => [prop.id, prop]))
       const scene = sceneMap.get(shot.scene_id)
       const characterNames = shot.character_ids
         .map((cid) => characterMap.get(cid)?.name)
+        .filter(Boolean)
+        .join(', ')
+      const propNames = shot.prop_ids
+        .map((pid) => propMap.get(pid)?.name)
         .filter(Boolean)
         .join(', ')
 
@@ -1240,15 +1514,21 @@ export function StudioWorkspace({
         const cref = await readThumbnailAsBase64(characterMap.get(cid)?.thumbnail ?? null)
         if (cref) referenceImages.push(cref)
       }
+      for (const pid of shot.prop_ids.slice(0, 3)) {
+        const pref = await readThumbnailAsBase64(propMap.get(pid)?.thumbnail ?? null)
+        if (pref) referenceImages.push(pref)
+      }
 
       const prompt = buildShotImagePrompt({
         shot,
         scene,
         characterNames,
+        propNames,
         previousShot,
         nextShot,
         sceneMap,
         characterMap,
+        propMap,
       })
 
       const result = await window.aiAPI.generateImage({
@@ -1326,9 +1606,14 @@ export function StudioWorkspace({
 
       const sceneMap = new Map(seriesScenes.map((scene) => [scene.id, scene]))
       const characterMap = new Map(projectCharacters.map((character) => [character.id, character]))
+      const propMap = new Map(projectProps.map((prop) => [prop.id, prop]))
       const scene = sceneMap.get(activeShot.scene_id)
       const characterNames = activeShot.character_ids
         .map((cid) => characterMap.get(cid)?.name)
+        .filter(Boolean)
+        .join(', ')
+      const propNames = activeShot.prop_ids
+        .map((pid) => propMap.get(pid)?.name)
         .filter(Boolean)
         .join(', ')
 
@@ -1340,6 +1625,10 @@ export function StudioWorkspace({
       for (const cid of activeShot.character_ids.slice(0, 3)) {
         const cref = await readThumbnailAsBase64(characterMap.get(cid)?.thumbnail ?? null)
         if (cref) referenceImages.push(cref)
+      }
+      for (const pid of activeShot.prop_ids.slice(0, 3)) {
+        const pref = await readThumbnailAsBase64(propMap.get(pid)?.thumbnail ?? null)
+        if (pref) referenceImages.push(pref)
       }
 
       if (!middleRef) {
@@ -1363,6 +1652,7 @@ export function StudioWorkspace({
         `Time: ${scene?.time || 'unknown'}`,
         `Mood: ${scene?.mood || 'unknown'}`,
         characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
+        propNames ? `Props in shot: ${propNames}` : 'Props in shot: none',
       ].join('\n')
 
       const result = await window.aiAPI.generateImage({
@@ -1493,9 +1783,14 @@ export function StudioWorkspace({
     try {
       const sceneMap = new Map(seriesScenes.map((scene) => [scene.id, scene]))
       const characterMap = new Map(projectCharacters.map((character) => [character.id, character]))
+      const propMap = new Map(projectProps.map((prop) => [prop.id, prop]))
       const scene = sceneMap.get(shot.scene_id)
       const characterNames = shot.character_ids
         .map((cid) => characterMap.get(cid)?.name)
+        .filter(Boolean)
+        .join(', ')
+      const propNames = shot.prop_ids
+        .map((pid) => propMap.get(pid)?.name)
         .filter(Boolean)
         .join(', ')
 
@@ -1518,6 +1813,14 @@ export function StudioWorkspace({
         }
         referenceImages.push(firstRef, lastRef)
       }
+      for (const cid of shot.character_ids.slice(0, 3)) {
+        const cref = await readThumbnailAsBase64(characterMap.get(cid)?.thumbnail ?? null)
+        if (cref) referenceImages.push(cref)
+      }
+      for (const pid of shot.prop_ids.slice(0, 3)) {
+        const pref = await readThumbnailAsBase64(propMap.get(pid)?.thumbnail ?? null)
+        if (pref) referenceImages.push(pref)
+      }
 
       const prompt = [
         'Cinematic video generation for storyboard production, no watermark text.',
@@ -1536,6 +1839,7 @@ export function StudioWorkspace({
         `Time: ${scene?.time || 'unknown'}`,
         `Mood: ${scene?.mood || 'unknown'}`,
         characterNames ? `Characters in shot: ${characterNames}` : 'Characters in shot: none',
+        propNames ? `Props in shot: ${propNames}` : 'Props in shot: none',
       ].join('\n')
 
       const result = await window.aiAPI.generateVideo({
@@ -1888,10 +2192,10 @@ export function StudioWorkspace({
                 key={step.key}
                 type="button"
                 onClick={() => {
-                  if (step.key === 'script' || step.key === 'character' || step.key === 'storyboard' || step.key === 'shot' || step.key === 'production' || step.key === 'export') setActiveStep(step.key)
+                  if (step.key === 'script' || step.key === 'character' || step.key === 'prop' || step.key === 'storyboard' || step.key === 'shot' || step.key === 'production' || step.key === 'export') setActiveStep(step.key)
                 }}
                 className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 border shrink-0 text-sm font-medium transition-colors ${
-                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'storyboard' && step.key === 'storyboard') || (activeStep === 'shot' && step.key === 'shot') || (activeStep === 'production' && step.key === 'production') || (activeStep === 'export' && step.key === 'export')
+                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'prop' && step.key === 'prop') || (activeStep === 'storyboard' && step.key === 'storyboard') || (activeStep === 'shot' && step.key === 'shot') || (activeStep === 'production' && step.key === 'production') || (activeStep === 'export' && step.key === 'export')
                     ? 'border-primary/40 bg-primary/10 text-primary'
                     : idx <= 5
                       ? 'border-base-300 hover:border-primary/30 text-base-content/70'
@@ -1908,6 +2212,7 @@ export function StudioWorkspace({
 
       <div className="p-5 flex-1 min-h-0">
         {characterError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{characterError}</div> : null}
+        {propError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{propError}</div> : null}
         {sceneError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{sceneError}</div> : null}
         {shotError ? <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{shotError}</div> : null}
         {showCharacterPanel ? (
@@ -1925,6 +2230,22 @@ export function StudioWorkspace({
             onGenerateTurnaround={(id) => queueGenerateCharacterImage(id)}
             onGenerateAllImages={() => void generateAllCharacterImages()}
             generatingAllImages={generatingCharacterImages}
+          />
+        ) : showPropPanel ? (
+          <PropPanel
+            props={projectProps}
+            extractingFromScript={propExtractMode === 'merge'}
+            extractingRegenerate={propExtractMode === 'replace'}
+            propBusyId={propBusyId}
+            showAdvancedActions
+            onAddProp={(draft) => void handleAddProp(draft)}
+            onUpdateProp={(id, draft) => void handleUpdateProp(id, draft)}
+            onDeleteProp={(id, name) => void handleDeleteProp(id, name)}
+            onExtractFromScript={() => void handleExtractPropsFromScript()}
+            onRegenerateFromScript={() => void handleRegeneratePropsFromScript()}
+            onGenerateTurnaround={(id) => queueGeneratePropImage(id)}
+            onGenerateAllImages={() => void generateAllPropImages()}
+            generatingAllImages={generatingPropImages}
           />
         ) : showScenePanel ? (
           <ScenePanel
@@ -1947,6 +2268,7 @@ export function StudioWorkspace({
             shots={seriesShots}
             scenes={seriesScenes.map((scene) => ({ id: scene.id, title: scene.title }))}
             characters={projectCharacters.map((character) => ({ id: character.id, name: character.name }))}
+            props={projectProps.map((prop) => ({ id: prop.id, name: prop.name }))}
             generatingFromScript={generatingShotsFromScript}
             generatingAllImages={generatingShotImages}
             generatingShotId={generatingShotId}

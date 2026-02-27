@@ -22,6 +22,8 @@ const MIGRATIONS_DIR = app.isPackaged
   : path.join(__dirname, '..', 'electron', 'migrations')
 
 const SHOTS_PRODUCTION_COLUMNS_MIGRATION_MILLIS = 1771982985060
+const PROPS_TABLE_CREATE_MIGRATION_MILLIS = 1772154932545
+const SHOTS_PROP_IDS_MIGRATION_MILLIS = 1772156051044
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null
 let _sqlite: InstanceType<typeof Database> | null = null
@@ -32,6 +34,20 @@ function isShotsProductionColumnsMigrationConflict(error: unknown): boolean {
     message.includes('production_first_frame')
     && message.includes('ALTER TABLE')
     && message.includes('shots')
+  )
+}
+
+function isPropsTableCreateMigrationConflict(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /CREATE TABLE\s+[`"]?props[`"]?/i.test(message)
+}
+
+function isShotsPropIdsMigrationConflict(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    /prop_ids/i.test(message)
+    && /shots/i.test(message)
+    && (/ALTER TABLE/i.test(message) || /duplicate column/i.test(message) || /NOT NULL/i.test(message))
   )
 }
 
@@ -55,7 +71,34 @@ function ensureShotsProductionColumns(raw: InstanceType<typeof Database>): void 
   }
 }
 
-function markMigrationApplied(raw: InstanceType<typeof Database>, createdAt: number): void {
+function ensureShotsPropIdsColumn(raw: InstanceType<typeof Database>): void {
+  const tableExists = raw
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .get('shots')
+  if (!tableExists) return
+
+  const columns = raw.prepare("PRAGMA table_info('shots')").all() as Array<{ name: string }>
+  const names = new Set(columns.map((column) => column.name))
+  if (!names.has('prop_ids')) {
+    raw.exec("ALTER TABLE shots ADD COLUMN prop_ids text NOT NULL DEFAULT '[]'")
+  }
+  raw.exec("UPDATE shots SET prop_ids = '[]' WHERE prop_ids IS NULL OR prop_ids = ''")
+}
+
+function ensurePropsTableColumns(raw: InstanceType<typeof Database>): void {
+  const tableExists = raw
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .get('props')
+  if (!tableExists) return
+
+  const columns = raw.prepare("PRAGMA table_info('props')").all() as Array<{ name: string }>
+  const names = new Set(columns.map((column) => column.name))
+  if (!names.has('thumbnail')) {
+    raw.exec('ALTER TABLE props ADD COLUMN thumbnail text')
+  }
+}
+
+function markMigrationApplied(raw: InstanceType<typeof Database>, createdAt: number, hash: string): void {
   raw.exec(`
     CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,13 +113,23 @@ function markMigrationApplied(raw: InstanceType<typeof Database>, createdAt: num
   if (!existing) {
     raw
       .prepare('INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES(?, ?)')
-      .run('manual_hotfix_0009_shots_production_columns', createdAt)
+      .run(hash, createdAt)
   }
 }
 
 function recoverShotsMigrationConflict(raw: InstanceType<typeof Database>): void {
   ensureShotsProductionColumns(raw)
-  markMigrationApplied(raw, SHOTS_PRODUCTION_COLUMNS_MIGRATION_MILLIS)
+  markMigrationApplied(raw, SHOTS_PRODUCTION_COLUMNS_MIGRATION_MILLIS, 'manual_hotfix_0009_shots_production_columns')
+}
+
+function recoverPropsMigrationConflict(raw: InstanceType<typeof Database>): void {
+  ensurePropsTableColumns(raw)
+  markMigrationApplied(raw, PROPS_TABLE_CREATE_MIGRATION_MILLIS, 'manual_hotfix_0011_props_table_exists')
+}
+
+function recoverShotsPropIdsMigrationConflict(raw: InstanceType<typeof Database>): void {
+  ensureShotsPropIdsColumn(raw)
+  markMigrationApplied(raw, SHOTS_PROP_IDS_MIGRATION_MILLIS, 'manual_hotfix_0012_shots_prop_ids')
 }
 
 export function getDb() {
@@ -92,11 +145,15 @@ export function getDb() {
     try {
       migrate(_db, { migrationsFolder: MIGRATIONS_DIR })
     } catch (error) {
-      if (!isShotsProductionColumnsMigrationConflict(error)) {
+      if (isShotsProductionColumnsMigrationConflict(error)) {
+        recoverShotsMigrationConflict(_sqlite)
+      } else if (isPropsTableCreateMigrationConflict(error)) {
+        recoverPropsMigrationConflict(_sqlite)
+      } else if (isShotsPropIdsMigrationConflict(error)) {
+        recoverShotsPropIdsMigrationConflict(_sqlite)
+      } else {
         throw error
       }
-
-      recoverShotsMigrationConflict(_sqlite)
       migrate(_db, { migrationsFolder: MIGRATIONS_DIR })
     }
 

@@ -36,6 +36,16 @@ export const characters = sqliteTable('characters', {
   created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
 
+export const props = sqliteTable('props', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').notNull(),
+  name: text('name').notNull().$default(() => ''),
+  category: text('category').notNull().$default(() => ''),
+  description: text('description').notNull().$default(() => ''),
+  thumbnail: text('thumbnail'),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
+
 export const scenes = sqliteTable('scenes', {
   id: text('id').primaryKey(),
   project_id: text('project_id').notNull(),
@@ -62,6 +72,7 @@ export const shots = sqliteTable('shots', {
   action: text('action').notNull().$default(() => ''),
   dialogue: text('dialogue').notNull().$default(() => ''),
   character_ids: text('character_ids').notNull().$default(() => '[]'),
+  prop_ids: text('prop_ids').notNull().$default(() => '[]'),
   thumbnail: text('thumbnail'),
   production_first_frame: text('production_first_frame'),
   production_last_frame: text('production_last_frame'),

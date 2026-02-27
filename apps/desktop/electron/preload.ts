@@ -73,6 +73,15 @@ type CharacterRow = {
   background: string
   created_at: number
 }
+type PropRow = {
+  id: string
+  project_id: string
+  name: string
+  category: string
+  description: string
+  thumbnail: string | null
+  created_at: number
+}
 type SceneRow = {
   id: string
   project_id: string
@@ -98,6 +107,7 @@ type ShotRow = {
   action: string
   dialogue: string
   character_ids: string[]
+  prop_ids: string[]
   thumbnail: string | null
   production_first_frame: string | null
   production_last_frame: string | null
@@ -166,6 +176,10 @@ contextBridge.exposeInMainWorld('aiAPI', {
     params: { script: string; modelKey?: string },
   ): Promise<{ ok: true; scenes: Array<{ title: string; location: string; time: string; mood: string; description: string; shot_notes: string }> } | { ok: false; error: string }> =>
     ipcRenderer.invoke('ai:extractScenesFromScript', params),
+  extractPropsFromScript: (
+    params: { script: string; modelKey?: string },
+  ): Promise<{ ok: true; props: Array<{ name: string; category: string; description: string }> } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('ai:extractPropsFromScript', params),
   enhanceSceneFromScript: (
     params: {
       script: string
@@ -187,9 +201,10 @@ contextBridge.exposeInMainWorld('aiAPI', {
         shot_notes?: string
       }>
       characters: Array<{ id: string; name: string }>
+      props: Array<{ id: string; name: string; category?: string; description?: string }>
       modelKey?: string
     },
-  ): Promise<{ ok: true; shots: Array<{ title: string; scene_ref: string; character_refs: string[]; shot_size: string; camera_angle: string; camera_move: string; duration_sec: number; action: string; dialogue: string }> } | { ok: false; error: string }> =>
+  ): Promise<{ ok: true; shots: Array<{ title: string; scene_ref: string; character_refs: string[]; prop_refs: string[]; shot_size: string; camera_angle: string; camera_move: string; duration_sec: number; action: string; dialogue: string }> } | { ok: false; error: string }> =>
     ipcRenderer.invoke('ai:extractShotsFromScript', params),
   scriptToolkit: (
     params: {
@@ -298,6 +313,16 @@ contextBridge.exposeInMainWorld('charactersAPI', {
   delete: (id: string): Promise<void> => ipcRenderer.invoke('characters:delete', id),
   replaceByProject: (payload: { projectId: string; characters: CharacterRow[] }): Promise<void> =>
     ipcRenderer.invoke('characters:replaceByProject', payload),
+})
+
+contextBridge.exposeInMainWorld('propsAPI', {
+  getAll: (): Promise<PropRow[]> => ipcRenderer.invoke('props:getAll'),
+  getByProject: (projectId: string): Promise<PropRow[]> => ipcRenderer.invoke('props:getByProject', projectId),
+  insert: (prop: PropRow): Promise<void> => ipcRenderer.invoke('props:insert', prop),
+  update: (prop: PropRow): Promise<void> => ipcRenderer.invoke('props:update', prop),
+  delete: (id: string): Promise<void> => ipcRenderer.invoke('props:delete', id),
+  replaceByProject: (payload: { projectId: string; props: PropRow[] }): Promise<void> =>
+    ipcRenderer.invoke('props:replaceByProject', payload),
 })
 
 contextBridge.exposeInMainWorld('scenesAPI', {

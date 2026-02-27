@@ -4,13 +4,15 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from '@tanstack/react-db'
 import { ArrowLeft, Clock3, Play, Plus, Trash2 } from 'lucide-react'
 import { charactersCollection } from '../db/characters_collection'
+import { propsCollection } from '../db/props_collection'
 import { projectsCollection } from '../db/projects_collection'
 import { seriesCollection } from '../db/series_collection'
 import { CharacterPanel, type CreateCharacterDraft } from './CharacterPanel'
+import { PropPanel, type CreatePropDraft } from './PropPanel'
 import { ScenePanel, type CreateSceneDraft } from './ScenePanel'
 import { StudioWorkspace } from './StudioWorkspace'
 
-type ProjectDetailTab = 'episodes' | 'characters' | 'scenes'
+type ProjectDetailTab = 'episodes' | 'characters' | 'props' | 'scenes'
 type Scene = Awaited<ReturnType<Window['scenesAPI']['getByProject']>>[number]
 
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
@@ -20,6 +22,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const { data: projects } = useLiveQuery(projectsCollection)
   const { data: allSeries } = useLiveQuery(seriesCollection)
   const { data: allCharacters } = useLiveQuery(charactersCollection)
+  const { data: allProps } = useLiveQuery(propsCollection)
 
   const project = useMemo(() => (projects ?? []).find((p) => p.id === projectId) ?? null, [projects, projectId])
   const series = useMemo(
@@ -29,6 +32,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const projectCharacters = useMemo(
     () => (allCharacters ?? []).filter((item) => item.project_id === projectId).sort((a, b) => a.created_at - b.created_at),
     [allCharacters, projectId],
+  )
+  const projectProps = useMemo(
+    () => (allProps ?? []).filter((item) => item.project_id === projectId).sort((a, b) => a.created_at - b.created_at),
+    [allProps, projectId],
   )
   const selectedSeriesId = useMemo(() => {
     const params = new URLSearchParams(location.search)
@@ -46,6 +53,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>('episodes')
   const [saving, setSaving] = useState(false)
   const [characterError, setCharacterError] = useState('')
+  const [propError, setPropError] = useState('')
   const [sceneError, setSceneError] = useState('')
   const [projectScenes, setProjectScenes] = useState<Scene[]>([])
   const [scenesLoading, setScenesLoading] = useState(false)
@@ -82,6 +90,11 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         key: 'characters',
         label: t('projectLibrary.tabCharacterLibrary'),
         subtitle: t('projectLibrary.charactersSubtitle'),
+      },
+      {
+        key: 'props',
+        label: t('projectLibrary.tabPropLibrary'),
+        subtitle: t('projectLibrary.propsSubtitle'),
       },
       {
         key: 'scenes',
@@ -185,6 +198,53 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       charactersCollection.delete(id)
     } catch {
       setCharacterError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleAddProp(draft: CreatePropDraft) {
+    setPropError('')
+    try {
+      propsCollection.insert({
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        name: draft.name,
+        category: draft.category,
+        description: draft.description,
+        thumbnail: draft.thumbnail,
+        created_at: Date.now(),
+      })
+    } catch {
+      setPropError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleUpdateProp(id: string, draft: CreatePropDraft) {
+    setPropError('')
+    try {
+      propsCollection.update(id, (current) => {
+        current.name = draft.name
+        current.category = draft.category
+        current.description = draft.description
+        current.thumbnail = draft.thumbnail
+      })
+    } catch {
+      setPropError(t('projectLibrary.saveError'))
+    }
+  }
+
+  async function handleDeleteProp(id: string, name: string) {
+    setPropError('')
+    const shouldDelete = window.confirm(
+      t('projectLibrary.propDeleteConfirm', {
+        name: name || t('projectLibrary.propDefaultName'),
+      }),
+    )
+    if (!shouldDelete) return
+
+    try {
+      propsCollection.delete(id)
+    } catch {
+      setPropError(t('projectLibrary.saveError'))
     }
   }
 
@@ -402,6 +462,9 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         {activeTab === 'characters' && characterError ? (
           <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{characterError}</div>
         ) : null}
+        {activeTab === 'props' && propError ? (
+          <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{propError}</div>
+        ) : null}
         {activeTab === 'scenes' && sceneError ? (
           <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">{sceneError}</div>
         ) : null}
@@ -456,22 +519,31 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
           )}
 
           {activeTab === 'characters' && (
-          <CharacterPanel
-            characters={projectCharacters}
-            extractingFromDraft={false}
-            extractingRegenerate={false}
-            characterBusyId={null}
-            showAdvancedActions={false}
-            showSmartGenerate
-            onAddCharacter={(draft) => void handleAddCharacter(draft)}
-            onUpdateCharacter={(id, draft) => void handleUpdateCharacter(id, draft)}
-            onSmartGenerateCharacter={handleSmartGenerateProjectCharacter}
-            onExtractFromScript={() => undefined}
-            onRegenerateFromScript={() => undefined}
-            onDeleteCharacter={(id, name) => void handleDeleteCharacter(id, name)}
+            <CharacterPanel
+              characters={projectCharacters}
+              extractingFromDraft={false}
+              extractingRegenerate={false}
+              characterBusyId={null}
+              showAdvancedActions={false}
+              showSmartGenerate
+              onAddCharacter={(draft) => void handleAddCharacter(draft)}
+              onUpdateCharacter={(id, draft) => void handleUpdateCharacter(id, draft)}
+              onSmartGenerateCharacter={handleSmartGenerateProjectCharacter}
+              onExtractFromScript={() => undefined}
+              onRegenerateFromScript={() => undefined}
+              onDeleteCharacter={(id, name) => void handleDeleteCharacter(id, name)}
               onGenerateTurnaround={() => undefined}
               onGenerateAllImages={() => undefined}
               generatingAllImages={false}
+            />
+          )}
+
+          {activeTab === 'props' && (
+            <PropPanel
+              props={projectProps}
+              onAddProp={(draft) => void handleAddProp(draft)}
+              onUpdateProp={(id, draft) => void handleUpdateProp(id, draft)}
+              onDeleteProp={(id, name) => void handleDeleteProp(id, name)}
             />
           )}
 

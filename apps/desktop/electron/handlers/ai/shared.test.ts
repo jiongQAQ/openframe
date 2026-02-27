@@ -5,6 +5,7 @@ import {
   normalizeCharacterAge,
   normalizeCharacterGender,
   parseCharacters,
+  parseProps,
   parseScenes,
   parseShots,
   shortError,
@@ -79,6 +80,7 @@ describe('ai shared utilities', () => {
             title: ' Shot 1 ',
             scene_ref: ' Scene 1 ',
             character_refs: [' Alice ', '', 42],
+            prop_refs: [' Sword ', '', 123],
             shot_size: 'close-up',
             camera_angle: 'eye-level',
             camera_move: 'dolly',
@@ -105,11 +107,31 @@ describe('ai shared utilities', () => {
       title: 'Shot 1',
       scene_ref: 'Scene 1',
       character_refs: ['Alice'],
+      prop_refs: ['Sword'],
       duration_sec: 2,
       action: 'run',
       dialogue: 'hello',
     })
     expect(shots[1]?.duration_sec).toBe(3)
+  })
+
+  it('parses props and filters invalid rows', () => {
+    const rows = parseProps(
+      JSON.stringify({
+        props: [
+          { name: ' Longsword ', category: ' Weapon ', description: ' forged steel blade ' },
+          { name: '  ', category: 'Ignored', description: 'Ignored' },
+        ],
+      }),
+    )
+
+    expect(rows).toEqual([
+      {
+        name: 'Longsword',
+        category: 'Weapon',
+        description: 'forged steel blade',
+      },
+    ])
   })
 
   it('strips cli-style params and builds toolkit prompt', () => {

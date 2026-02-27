@@ -121,6 +121,7 @@ function collectReferencedMediaPaths(mediaDirs: { thumbsDir: string; videosDir: 
   collect('SELECT thumbnail FROM projects', ['thumbnail'])
   collect('SELECT thumbnail FROM series', ['thumbnail'])
   collect('SELECT thumbnail FROM characters', ['thumbnail'])
+  collect('SELECT thumbnail FROM props', ['thumbnail'])
   collect('SELECT thumbnail FROM scenes', ['thumbnail'])
   collect('SELECT thumbnail FROM genres', ['thumbnail'])
   collect(

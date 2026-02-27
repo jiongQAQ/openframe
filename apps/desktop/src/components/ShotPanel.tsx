@@ -4,6 +4,7 @@ import { Camera, Clapperboard, PlusCircle, Sparkles, Trash2, X } from 'lucide-re
 
 type SceneOption = { id: string; title: string }
 type CharacterOption = { id: string; name: string }
+type PropOption = { id: string; name: string }
 
 export type ShotDraft = {
   scene_id: string
@@ -15,6 +16,7 @@ export type ShotDraft = {
   action: string
   dialogue: string
   character_ids: string[]
+  prop_ids: string[]
 }
 
 export type ShotCard = ShotDraft & {
@@ -32,6 +34,7 @@ interface ShotPanelProps {
   shots: ShotCard[]
   scenes: SceneOption[]
   characters: CharacterOption[]
+  props: PropOption[]
   generatingFromScript: boolean
   generatingAllImages: boolean
   generatingShotId: string | null
@@ -53,6 +56,7 @@ const emptyDraft: ShotDraft = {
   action: '',
   dialogue: '',
   character_ids: [],
+  prop_ids: [],
 }
 
 function getThumbnailSrc(value: string | null): string | null {
@@ -65,6 +69,7 @@ export function ShotPanel({
   shots,
   scenes,
   characters,
+  props,
   generatingFromScript,
   generatingAllImages,
   generatingShotId,
@@ -96,6 +101,12 @@ export function ShotPanel({
     return map
   }, [characters])
 
+  const propNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of props) map.set(item.id, item.name)
+    return map
+  }, [props])
+
   function openCreate() {
     setEditingId(null)
     setDraft({ ...emptyDraft, scene_id: scenes[0]?.id ?? '' })
@@ -115,6 +126,7 @@ export function ShotPanel({
       action: card.action,
       dialogue: card.dialogue,
       character_ids: card.character_ids,
+      prop_ids: card.prop_ids,
     })
     setError('')
     setOpen(true)
@@ -207,6 +219,11 @@ export function ShotPanel({
                 <div className="mt-2 flex flex-wrap gap-1">
                   {shot.character_ids.slice(0, 3).map((id) => (
                     <span key={id} className="badge badge-sm badge-outline">{characterNameMap.get(id) || '?'}</span>
+                  ))}
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {shot.prop_ids.slice(0, 3).map((id) => (
+                    <span key={id} className="badge badge-sm badge-ghost">{propNameMap.get(id) || '?'}</span>
                   ))}
                 </div>
                 <div className="mt-auto pt-3 border-t border-base-300 flex justify-center gap-1">
@@ -314,6 +331,31 @@ export function ShotPanel({
                           }}
                         />
                         <span className="text-xs">{c.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="form-control flex flex-col items-start gap-1 md:col-span-2">
+                <span className="text-sm font-medium text-base-content/75">{t('projectLibrary.shotPropsLabel')}</span>
+                <div className="w-full rounded-lg border border-base-300 p-2 max-h-40 overflow-auto flex flex-wrap gap-2">
+                  {props.map((item) => {
+                    const checked = draft.prop_ids.includes(item.id)
+                    return (
+                      <label key={item.id} className="label cursor-pointer gap-2 rounded-md border border-base-300 px-2 py-1">
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-xs"
+                          checked={checked}
+                          onChange={(e) => {
+                            setDraft((p) => ({
+                              ...p,
+                              prop_ids: e.target.checked ? [...p.prop_ids, item.id] : p.prop_ids.filter((id) => id !== item.id),
+                            }))
+                          }}
+                        />
+                        <span className="text-xs">{item.name}</span>
                       </label>
                     )
                   })}

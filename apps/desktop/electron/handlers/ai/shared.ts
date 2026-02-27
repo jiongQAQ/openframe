@@ -19,10 +19,17 @@ export type SceneExtractRow = {
   shot_notes: string
 }
 
+export type PropExtractRow = {
+  name: string
+  category: string
+  description: string
+}
+
 export type ShotExtractRow = {
   title: string
   scene_ref: string
   character_refs: string[]
+  prop_refs: string[]
   shot_size: string
   camera_angle: string
   camera_move: string
@@ -168,6 +175,21 @@ export function parseScenes(raw: string): SceneExtractRow[] {
     .filter((row) => row.title)
 }
 
+export function parseProps(raw: string): PropExtractRow[] {
+  const obj = extractJsonObject(raw)
+  const list = Array.isArray(obj?.props) ? obj.props : []
+  return list
+    .map((item) => {
+      const row = item as Record<string, unknown>
+      return {
+        name: toText(row.name).trim(),
+        category: toText(row.category).trim(),
+        description: toText(row.description).trim(),
+      }
+    })
+    .filter((row) => row.name)
+}
+
 export function parseShots(raw: string): ShotExtractRow[] {
   const obj = extractJsonObject(raw)
   const list = Array.isArray(obj?.shots) ? obj.shots : []
@@ -186,6 +208,9 @@ export function parseShots(raw: string): ShotExtractRow[] {
         scene_ref: toText(row.scene_ref).trim(),
         character_refs: Array.isArray(row.character_refs)
           ? row.character_refs.map((v) => toText(v).trim()).filter(Boolean)
+          : [],
+        prop_refs: Array.isArray(row.prop_refs)
+          ? row.prop_refs.map((v) => toText(v).trim()).filter(Boolean)
           : [],
         shot_size: toText(row.shot_size).trim(),
         camera_angle: toText(row.camera_angle).trim(),

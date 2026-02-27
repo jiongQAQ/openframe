@@ -6,6 +6,7 @@ import { registerGenresHandlers } from './genres'
 import { registerProjectsHandlers } from './projects'
 import { registerSeriesHandlers } from './series'
 import { registerCharactersHandlers } from './characters'
+import { registerPropsHandlers } from './props'
 import { registerScenesHandlers } from './scenes'
 import { registerShotsHandlers } from './shots'
 
@@ -16,6 +17,7 @@ export function registerDatabaseHandlers() {
   registerProjectsHandlers()
   registerSeriesHandlers()
   registerCharactersHandlers()
+  registerPropsHandlers()
   registerScenesHandlers()
   registerShotsHandlers()
   registerVectorsHandlers()

@@ -78,6 +78,20 @@
       "when": 1772153596943,
       "tag": "0010_scenes_project_link",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1772154932545,
+      "tag": "0011_tiny_wither",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1772156051044,
+      "tag": "0012_wild_wiccan",
+      "breakpoints": true
     }
   ]
 }

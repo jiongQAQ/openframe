@@ -6,12 +6,14 @@ import { resolveTextModel } from './model'
 import {
   CHARACTER_AGE_CANONICAL_PROMPT,
   CharacterExtractRow,
+  PropExtractRow,
   SceneExtractRow,
   ShotExtractRow,
   extractJsonObject,
   normalizeCharacterAge,
   normalizeCharacterGender,
   parseCharacters,
+  parseProps,
   parseScenes,
   parseShots,
   shortError,
@@ -127,6 +129,36 @@ export function registerAIExtractionHandlers() {
   )
 
   ipcMain.handle(
+    'ai:extractPropsFromScript',
+    async (
+      _event,
+      params: { script: string; modelKey?: string },
+    ): Promise<{ ok: true; props: PropExtractRow[] } | { ok: false; error: string }> => {
+      const config = store.get('ai_config') as AIConfig
+      const model = resolveTextModel(config, params.modelKey)
+      if (!model) return { ok: false, error: 'No default text model configured.' }
+
+      const prompt = [
+        'You are a screenplay production designer.',
+        'Extract key props from the script with concise production-ready info.',
+        'Return STRICT JSON only with shape:',
+        '{"props":[{"name":"","category":"","description":""}]}',
+        'Do not include markdown code fences.',
+        'Keep each field concise and actionable.',
+        'Do not output characters or scenes in props list unless they are clearly used as physical objects.',
+        `Script:\n${params.script}`,
+      ].join('\n\n')
+
+      try {
+        const { text } = await generateText({ model, prompt })
+        return { ok: true, props: parseProps(text) }
+      } catch (err: unknown) {
+        return { ok: false, error: shortError(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
     'ai:enhanceSceneFromScript',
     async (
       _event,
@@ -195,6 +227,7 @@ export function registerAIExtractionHandlers() {
           shot_notes?: string
         }>
         characters: Array<{ id: string; name: string }>
+        props: Array<{ id: string; name: string; category?: string; description?: string }>
         modelKey?: string
       },
     ): Promise<{ ok: true; shots: ShotExtractRow[] } | { ok: false; error: string }> => {
@@ -215,15 +248,16 @@ export function registerAIExtractionHandlers() {
         'Avoid disconnected or repetitive shots that do not advance the beat from the previous shot.',
         'Continuity detail must be very strong: adjacent shots should read like consecutive moments in the same ongoing action unless the script explicitly jumps.',
         'Keep action text specific and stateful, inheriting important props/poses/positions from prior shots when applicable.',
-        'Each shot must include scene_ref and character_refs, using ONLY provided IDs.',
-        'Do not invent new scene_ref or character_refs values.',
+        'Each shot must include scene_ref, character_refs, and prop_refs, using ONLY provided IDs.',
+        'Do not invent new scene_ref / character_refs / prop_refs values.',
         'Return STRICT JSON only with shape:',
-        '{"shots":[{"title":"","scene_ref":"","character_refs":[],"shot_size":"","camera_angle":"","camera_move":"","duration_sec":3,"action":"","dialogue":""}]}',
+        '{"shots":[{"title":"","scene_ref":"","character_refs":[],"prop_refs":[],"shot_size":"","camera_angle":"","camera_move":"","duration_sec":3,"action":"","dialogue":""}]}',
         'Keep each shot concise and production-usable.',
         'duration_sec should usually be between 1 and 5 unless the script clearly requires otherwise.',
         'Do not include markdown code fences.',
         `Scenes:\n${JSON.stringify(params.scenes)}`,
         `Characters:\n${JSON.stringify(params.characters)}`,
+        `Props:\n${JSON.stringify(params.props)}`,
         `Script:\n${params.script}`,
       ].join('\n\n')
 
