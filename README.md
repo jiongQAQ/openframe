@@ -4,114 +4,153 @@
 
 # Openframe
 
-Openframe is a desktop app for AI-assisted short-film production, covering script writing, character/scene/shot planning, and final media export.
+Openframe is an AI-powered desktop studio for turning scripts into characters, scenes, storyboards, shots, and production-ready videos.
 
 [中文文档](./README.zh.md)
 
-## 1. Overview
+## Highlights
 
-Openframe is a desktop app for AI-assisted short-film production, covering script writing, character/scene/shot planning, and final media export.
-
-## 2. Key Features
-
-- Project and episode management
-- Script editor with AI tools:
-  - scene expand / rewrite / dialogue polish
-  - pacing and continuity checks
+- End-to-end workflow: project -> script -> character/prop/scene -> shots -> production/export
+- Script editor with AI toolkit:
   - autocomplete
-  - generate script from an idea
-  - generate script from a novel excerpt
-- Character / prop / scene libraries (project-level) with AI workflows:
-  - extract and fill missing props from script
-  - generate character turnaround (front/side/back)
-  - generate prop and scene turnaround sheets (three-view)
-  - scene card layout adapts to project ratio (`16:9` / `9:16`)
-- Shot planning and production workspace:
-  - shot cards can associate both characters and props
-  - AI shot extraction keeps scene/character/prop references
-- Video export (merged video) and timeline export (FCPXML/EDL)
-- Data panel with media size stats and cleanup for unused files
-- Configurable AI providers, including custom providers
+  - generate script from idea
+  - adapt script from novel excerpt
+  - scene expand / rewrite / dialogue polish / pacing / continuity check
+- Character relation graph with script-driven extraction and optimization
+- Language-aware extraction for core entities (character / prop / scene / shot)
+- Scene image generation constrained to environment-only output (no people)
+- Shot generation supports target shot count input (higher count -> richer, smoother output)
+- Thumbnail full-image preview in character / prop / scene / shot panels
+- First-launch Driver.js style onboarding tour
 
-## 3. Stack
+## Core Features
 
-- Monorepo: `pnpm workspaces`
-- App: `Electron + React + Vite + TypeScript`
-- DB: `SQLite + better-sqlite3` with shared Drizzle schema
+1. Project & Episode Management
+- Create and organize projects and episodes
+- Open dedicated studio window for episode production
+
+2. Script Workspace
+- Rich editor powered by TipTap
+- AI tools available directly in editor toolbar
+- Real-time content save and generation workflow integration
+
+3. Character / Prop / Scene Libraries
+- Script-based extraction and regeneration
+- AI-assisted enhancement for cards
+- Turnaround-style image generation
+- Full-image preview by clicking thumbnails
+
+4. Character Relations
+- Build relation topology from project scripts
+- Optimize relation graph based on current script context
+
+5. Shot Design & Production
+- Generate shots from script with scene/character/prop references
+- Control target shot count before generation
+- Shot image generation and production frames/video workflow
+- Export merged video, FCPXML timeline, and EDL
+
+6. Data & Settings
+- Configurable AI providers/models (including custom providers)
+- Storage usage panel and cleanup for unused media
+- Language/theme and local data directory settings
+
+## Tech Stack
+
+- Monorepo: `pnpm workspace`
+- Desktop app: `Electron + React + Vite + TypeScript`
+- UI: `Tailwind CSS + daisyUI + lucide-react`
 - Editor: `TipTap`
-- AI: `Vercel AI SDK` + custom REST providers
+- Data layer: `SQLite + better-sqlite3 + Drizzle schema`
+- Reactive local state: `TanStack DB`
+- AI integration: `Vercel AI SDK + custom REST providers`
 - Vector search: `sqlite-vec`
 
-## 4. Repository Layout
+## Repository Layout
 
 ```text
 openframe/
-  apps/desktop/              # main Electron app
-  packages/db/               # shared DB schema
-  packages/providers/        # AI provider definitions
+  apps/
+    desktop/                 # main Electron app
+      electron/              # main process, IPC handlers
+      src/                   # renderer process (React)
+  packages/
+    db/                      # shared DB schema
+    providers/               # AI provider/model definitions
 ```
 
-## 5. Prerequisites
+## Prerequisites
 
 - Node.js (LTS recommended)
 - `pnpm@9.12.2`
 - Desktop OS: macOS / Windows / Linux
 
-## 6. Install & Run
+## Install & Run
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-`apps/desktop` runs `electron-rebuild` for `better-sqlite3` in `postinstall`.
+`apps/desktop` runs `electron-rebuild` for `better-sqlite3` during `postinstall`.
 
-## 7. Common Commands
+## Common Commands
 
 ```bash
+# root
 pnpm dev
 pnpm build
 pnpm lint
+pnpm test
 pnpm db:generate
 pnpm db:migrate
 
+# app type check
 pnpm -C apps/desktop exec tsc --noEmit
+
+# single file lint
 pnpm -C apps/desktop exec eslint src/components/ScriptEditor.tsx
 ```
 
-## 8. Architecture Rules
+## Architecture Rules
 
 - Renderer must not access DB/filesystem directly.
-- All persistence/file operations go through `window.*API` from `electron/preload.ts`.
-- For any new entity, update schema, handlers, preload bridge, type declarations, and renderer collections together.
+- Persistence and local file operations must go through `window.*API` from `electron/preload.ts`.
+- For any new entity, update this chain together:
+  1. `packages/db/schema.ts`
+  2. `apps/desktop/electron/handlers/*.ts`
+  3. `apps/desktop/electron/preload.ts`
+  4. `apps/desktop/electron/electron-env.d.ts`
+  5. `apps/desktop/src/db/*_collection.ts`
 - Handler SQL uses raw `better-sqlite3`.
-- Do not edit `apps/desktop/src/routeTree.gen.ts` manually.
+- Do not manually edit `apps/desktop/src/routeTree.gen.ts`.
 
-## 9. Database & Migrations
+## Database & Migrations
 
 - Runtime DB path: `app.getPath('userData')/app.db`
 - Migration folder: `apps/desktop/electron/migrations/`
-- After schema changes:
+
+After schema changes:
 
 ```bash
 pnpm -C apps/desktop db:generate
 ```
 
-## 10. i18n
+## i18n
 
-Keep locale files in sync:
+Keep locale files aligned:
 
 - `apps/desktop/src/i18n/locales/en.ts`
 - `apps/desktop/src/i18n/locales/zh.ts`
 
-## 11. Troubleshooting
+## Troubleshooting
 
 - `No default text model configured`: configure and enable a text model in Settings.
-- Native dependency issues: re-run `pnpm install` and ensure `electron-rebuild` succeeds.
-- AI/export failures: check provider config, model availability, and local media toolchain health.
+- Native dependency build issues: rerun `pnpm install` and verify `electron-rebuild` success.
+- AI or media export issues: verify provider config, model availability, and local media toolchain.
 
-## 12. Release & Changelog
+## Release
 
 - Push a tag matching `v*` (for example, `v0.7.0`) to trigger release workflow.
 - GitHub Actions builds desktop packages for macOS / Windows / Linux and uploads artifacts to GitHub Release.
-- GitHub Release Notes are auto-generated as changelog (`generate_release_notes` in `.github/workflows/release-build.yml`).
+- Release notes are auto-generated (`generate_release_notes` in `.github/workflows/release-build.yml`).
