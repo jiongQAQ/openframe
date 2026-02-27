@@ -3,6 +3,7 @@ import { runInTransaction } from './tx'
 
 export type SceneRow = {
   id: string
+  series_id?: string
   project_id: string
   title: string
   location: string
@@ -14,6 +15,16 @@ export type SceneRow = {
   created_at: number
 }
 
+let scenesHasSeriesIdColumnCache: boolean | null = null
+
+function hasScenesSeriesIdColumn(raw: ReturnType<typeof getRawDb>): boolean {
+  if (scenesHasSeriesIdColumnCache != null) return scenesHasSeriesIdColumnCache
+  const tableInfo = raw.prepare("PRAGMA table_info('scenes')").all() as Array<{ name: string }>
+  const columns = new Set(tableInfo.map((column) => column.name))
+  scenesHasSeriesIdColumnCache = columns.has('series_id')
+  return scenesHasSeriesIdColumnCache
+}
+
 export function ensureScenesSchema(): void {
   const raw = getRawDb()
   raw.exec(
@@ -22,6 +33,7 @@ export function ensureScenesSchema(): void {
 
   const tableInfo = raw.prepare("PRAGMA table_info('scenes')").all() as Array<{ name: string }>
   const columns = new Set(tableInfo.map((column) => column.name))
+  scenesHasSeriesIdColumnCache = columns.has('series_id')
   if (!columns.has('project_id')) {
     raw.exec('ALTER TABLE scenes ADD COLUMN project_id text')
   }
@@ -53,24 +65,50 @@ export function ensureScenesSchema(): void {
 
 export function getAllScenes(): SceneRow[] {
   const raw = getRawDb()
+  const hasSeriesId = hasScenesSeriesIdColumn(raw)
+  const selectSql = hasSeriesId
+    ? 'SELECT id, series_id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at FROM scenes ORDER BY created_at DESC'
+    : 'SELECT id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at FROM scenes ORDER BY created_at DESC'
   return raw
-    .prepare(
-      'SELECT id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at FROM scenes ORDER BY created_at DESC',
-    )
+    .prepare(selectSql)
     .all() as SceneRow[]
 }
 
 export function getScenesByProject(projectId: string): SceneRow[] {
   const raw = getRawDb()
+  const hasSeriesId = hasScenesSeriesIdColumn(raw)
+  const selectSql = hasSeriesId
+    ? 'SELECT id, series_id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at FROM scenes WHERE project_id = ? ORDER BY created_at ASC'
+    : 'SELECT id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at FROM scenes WHERE project_id = ? ORDER BY created_at ASC'
   return raw
-    .prepare(
-      'SELECT id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at FROM scenes WHERE project_id = ? ORDER BY created_at ASC',
-    )
+    .prepare(selectSql)
     .all(projectId) as SceneRow[]
 }
 
 export function insertScene(scene: SceneRow): void {
   const raw = getRawDb()
+  const hasSeriesId = hasScenesSeriesIdColumn(raw)
+  if (hasSeriesId) {
+    raw
+      .prepare(
+        'INSERT OR REPLACE INTO scenes (id, series_id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        scene.id,
+        scene.series_id ?? '',
+        scene.project_id,
+        scene.title,
+        scene.location,
+        scene.time,
+        scene.mood,
+        scene.description,
+        scene.shot_notes,
+        scene.thumbnail,
+        scene.created_at,
+      )
+    return
+  }
+
   raw
     .prepare(
       'INSERT OR REPLACE INTO scenes (id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -109,26 +147,47 @@ export function updateScene(scene: SceneRow): void {
 
 export function replaceScenesByProject(payload: { projectId: string; scenes: SceneRow[] }): void {
   runInTransaction((raw) => {
+    const hasSeriesId = hasScenesSeriesIdColumn(raw)
     raw
       .prepare('DELETE FROM shots WHERE scene_id IN (SELECT id FROM scenes WHERE project_id = ?)')
       .run(payload.projectId)
     raw.prepare('DELETE FROM scenes WHERE project_id = ?').run(payload.projectId)
-    const insertStmt = raw.prepare(
-      'INSERT INTO scenes (id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    )
-    for (const scene of payload.scenes) {
-      insertStmt.run(
-        scene.id,
-        payload.projectId,
-        scene.title,
-        scene.location,
-        scene.time,
-        scene.mood,
-        scene.description,
-        scene.shot_notes,
-        scene.thumbnail,
-        scene.created_at,
+    const insertStmt = hasSeriesId
+      ? raw.prepare(
+        'INSERT INTO scenes (id, series_id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
+      : raw.prepare(
+        'INSERT INTO scenes (id, project_id, title, location, time, mood, description, shot_notes, thumbnail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+    for (const scene of payload.scenes) {
+      if (hasSeriesId) {
+        insertStmt.run(
+          scene.id,
+          scene.series_id ?? '',
+          payload.projectId,
+          scene.title,
+          scene.location,
+          scene.time,
+          scene.mood,
+          scene.description,
+          scene.shot_notes,
+          scene.thumbnail,
+          scene.created_at,
+        )
+      } else {
+        insertStmt.run(
+          scene.id,
+          payload.projectId,
+          scene.title,
+          scene.location,
+          scene.time,
+          scene.mood,
+          scene.description,
+          scene.shot_notes,
+          scene.thumbnail,
+          scene.created_at,
+        )
+      }
     }
   })
 }

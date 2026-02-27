@@ -22,6 +22,61 @@ import {
   toText,
 } from './shared'
 
+function detectScriptLanguage(script: string): 'zh' | 'en' {
+  const chineseChars = (script.match(/[\u4e00-\u9fff]/g) || []).length
+  const latinChars = (script.match(/[A-Za-z]/g) || []).length
+  return chineseChars >= latinChars ? 'zh' : 'en'
+}
+
+function getOutputLanguageRules(
+  script: string,
+  domain: 'character' | 'scene' | 'prop' | 'shot',
+): { outputLanguage: 'Simplified Chinese' | 'English'; languageRule: string } {
+  const isZh = detectScriptLanguage(script) === 'zh'
+  if (domain === 'character') {
+    return isZh
+      ? {
+        outputLanguage: 'Simplified Chinese',
+        languageRule: 'If the script is Chinese, do not translate character text fields into English unless the script itself uses English proper nouns.',
+      }
+      : {
+        outputLanguage: 'English',
+        languageRule: 'If the script is English, keep all character text fields in English.',
+      }
+  }
+  if (domain === 'scene') {
+    return isZh
+      ? {
+        outputLanguage: 'Simplified Chinese',
+        languageRule: 'If the script is Chinese, do not translate scene fields into English unless the script itself uses English proper nouns.',
+      }
+      : {
+        outputLanguage: 'English',
+        languageRule: 'If the script is English, keep all scene fields in English.',
+      }
+  }
+  if (domain === 'prop') {
+    return isZh
+      ? {
+        outputLanguage: 'Simplified Chinese',
+        languageRule: 'If the script is Chinese, do not translate prop text into English unless the script itself uses English proper nouns.',
+      }
+      : {
+        outputLanguage: 'English',
+        languageRule: 'If the script is English, keep all prop text in English.',
+      }
+  }
+  return isZh
+    ? {
+      outputLanguage: 'Simplified Chinese',
+      languageRule: 'If the script is Chinese, do not translate shot text into English unless the script itself uses English proper nouns.',
+    }
+    : {
+      outputLanguage: 'English',
+      languageRule: 'If the script is English, keep all shot text fields in English.',
+    }
+}
+
 export function registerAIExtractionHandlers() {
   ipcMain.handle(
     'ai:extractCharactersFromScript',
@@ -32,11 +87,14 @@ export function registerAIExtractionHandlers() {
       const config = store.get('ai_config') as AIConfig
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
+      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script, 'character')
 
       const prompt = [
         'You are a screenplay analyst.',
         'Extract key characters from the script and summarize each one.',
         `Age must be one of: ${CHARACTER_AGE_CANONICAL_PROMPT.join(' / ')}.`,
+        `Character text fields (name/personality/appearance/background) must be written in ${outputLanguage}.`,
+        languageRule,
         'Return STRICT JSON only with shape:',
         '{"characters":[{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}]}',
         'Do not include markdown code fences.',
@@ -66,11 +124,14 @@ export function registerAIExtractionHandlers() {
       const config = store.get('ai_config') as AIConfig
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
+      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script, 'character')
 
       const prompt = [
         'You are a screenplay character designer.',
         'Enhance one character card using the script context.',
         `Age must be one of: ${CHARACTER_AGE_CANONICAL_PROMPT.join(' / ')}.`,
+        `Character text fields (name/personality/appearance/background) must be written in ${outputLanguage}.`,
+        languageRule,
         'Return STRICT JSON only with shape:',
         '{"character":{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}}',
         'Keep the same character identity and name.',
@@ -110,10 +171,19 @@ export function registerAIExtractionHandlers() {
       const config = store.get('ai_config') as AIConfig
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
+      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script, 'scene')
 
       const prompt = [
         'You are a screenplay scene planner.',
         'Extract key scenes from the script with concise production-ready info.',
+        'A scene means a continuous block in one primary location and time period.',
+        'Do NOT treat plot events/beats/actions as separate scenes.',
+        'If multiple events happen continuously in the same location/time, merge them into one scene.',
+        'Scene title must describe the setting or scene unit, not an event statement.',
+        'Bad title examples (event-level): "Argument erupts", "Finds a clue".',
+        'Good title examples (scene-level): "Police Station Interrogation Room", "Rooftop at Night".',
+        `All text fields (title/location/time/mood/description/shot_notes) must be written in ${outputLanguage}.`,
+        languageRule,
         'Return STRICT JSON only with shape:',
         '{"scenes":[{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}]}',
         'Do not include markdown code fences.',
@@ -139,10 +209,13 @@ export function registerAIExtractionHandlers() {
       const config = store.get('ai_config') as AIConfig
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
+      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script, 'prop')
 
       const prompt = [
         'You are a screenplay production designer.',
         'Extract key props from the script with concise production-ready info.',
+        `All text fields (name/category/description) must be written in ${outputLanguage}.`,
+        languageRule,
         'Return STRICT JSON only with shape:',
         '{"props":[{"name":"","category":"","description":""}]}',
         'Do not include markdown code fences.',
@@ -257,10 +330,13 @@ export function registerAIExtractionHandlers() {
       const config = store.get('ai_config') as AIConfig
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
+      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script, 'scene')
 
       const prompt = [
         'You are a screenplay scene planner.',
         'Enhance one scene card based on script context.',
+        `All text fields (title/location/time/mood/description/shot_notes) must be written in ${outputLanguage}.`,
+        languageRule,
         'Return STRICT JSON only with shape:',
         '{"scene":{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}}',
         'Do not include markdown code fences.',
@@ -315,12 +391,18 @@ export function registerAIExtractionHandlers() {
           evidence?: string
         }>
         props: Array<{ id: string; name: string; category?: string; description?: string }>
+        target_count?: number
         modelKey?: string
       },
     ): Promise<{ ok: true; shots: ShotExtractRow[] } | { ok: false; error: string }> => {
       const config = store.get('ai_config') as AIConfig
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
+      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script, 'shot')
+      const rawTargetCount = typeof params.target_count === 'number' ? params.target_count : Number.NaN
+      const targetCount = Number.isFinite(rawTargetCount)
+        ? Math.max(1, Math.min(200, Math.round(rawTargetCount)))
+        : null
 
       const relations = Array.isArray(params.relations)
         ? params.relations
@@ -349,6 +431,12 @@ export function registerAIExtractionHandlers() {
       const prompt = [
         'You are a screenplay storyboard planner.',
         'Generate a practical shot list from the script.',
+        ...(targetCount ? [
+          `Target shot count: ${targetCount}.`,
+          `Try to output close to ${targetCount} shots (allow small deviation only if script structure truly requires it).`,
+        ] : []),
+        `Narrative text fields (title/shot_size/camera_angle/camera_move/action/dialogue) must be written in ${outputLanguage}.`,
+        languageRule,
         'Maximize shot count as much as reasonably possible while staying faithful to the script.',
         'Prefer finer granularity: split each scene into many short, meaningful beats instead of merging beats into long shots.',
         'If uncertain between fewer vs more shots, choose more shots.',

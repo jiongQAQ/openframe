@@ -75,6 +75,7 @@ export function ScenePanel({
   const cardHeightClass = projectRatio === '9:16' ? 'h-112' : 'h-105'
   const mediaAspectClass = projectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'
   const [editingSceneId, setEditingSceneId] = useState<string | null>(null)
+  const [previewSceneId, setPreviewSceneId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createError, setCreateError] = useState('')
   const [createUploading, setCreateUploading] = useState(false)
@@ -89,6 +90,7 @@ export function ScenePanel({
     shot_notes: '',
     thumbnail: null,
   })
+  const previewScene = previewSceneId ? scenes.find((item) => item.id === previewSceneId) ?? null : null
   function handleOpenCreate() {
     setEditingSceneId(null)
     setCreateError('')
@@ -225,11 +227,19 @@ export function ScenePanel({
 
           {scenes.map((scene) => (
             <article key={scene.id} className={`${cardWidthClass} ${cardHeightClass} shrink-0 rounded-xl border border-base-300 bg-base-100 overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow`} onClick={() => handleOpenEdit(scene)}>
-              <div className="border-b border-base-300 bg-linear-to-b from-base-200 via-base-100 to-base-200/70">
+              <button
+                type="button"
+                className="border-b border-base-300 bg-linear-to-b from-base-200 via-base-100 to-base-200/70 w-full"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  if (scene.thumbnail) setPreviewSceneId(scene.id)
+                }}
+              >
                 <div className={`${mediaAspectClass} w-full flex items-center justify-center`}>
                   {getThumbnailSrc(scene.thumbnail) ? <img src={getThumbnailSrc(scene.thumbnail)!} alt={scene.title} className="h-full w-full object-cover" /> : <Clapperboard size={38} className="text-base-content/50" />}
                 </div>
-              </div>
+              </button>
               <div className="p-3 flex-1 min-h-0 flex flex-col">
                 <p className="text-base font-semibold line-clamp-1">{scene.title || t('projectLibrary.sceneCardUntitled')}</p>
                 <div className="mt-2 flex gap-1 text-xs text-base-content/65"><MapPin size={12} className="shrink-0 mt-0.5" /><span className="line-clamp-1">{[scene.location, scene.time].filter(Boolean).join(' · ') || '-'}</span></div>
@@ -285,6 +295,32 @@ export function ScenePanel({
             <div className="border-t border-base-300 bg-base-100 px-5 py-3 md:px-6 flex items-center justify-end gap-2">
               <button type="button" className="btn btn-sm btn-ghost" onClick={() => setCreateOpen(false)}>{t('projectLibrary.sceneCreateCancel')}</button>
               <button type="button" className="btn btn-sm btn-primary" onClick={handleCreateSubmit}>{editingSceneId ? t('projectLibrary.sceneUpdateConfirm') : t('projectLibrary.sceneCreateConfirm')}</button>
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      {previewScene && getThumbnailSrc(previewScene.thumbnail) ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-base-content/70"
+            aria-label={t('projectLibrary.close')}
+            onClick={() => setPreviewSceneId(null)}
+          />
+          <article className="relative z-10 w-full max-w-6xl rounded-xl border border-base-300 bg-base-100 overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-base-300">
+              <p className="text-sm font-medium line-clamp-1">{previewScene.title || t('projectLibrary.sceneCardUntitled')}</p>
+              <button type="button" className="btn btn-sm btn-ghost btn-circle" onClick={() => setPreviewSceneId(null)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="bg-black/80 max-h-[80vh] overflow-auto flex items-center justify-center p-4">
+              <img
+                src={getThumbnailSrc(previewScene.thumbnail)!}
+                alt={previewScene.title || t('projectLibrary.sceneCardUntitled')}
+                className="max-w-full h-auto object-contain rounded"
+              />
             </div>
           </article>
         </div>

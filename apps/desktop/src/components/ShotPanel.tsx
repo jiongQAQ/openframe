@@ -41,7 +41,7 @@ interface ShotPanelProps {
   onAddShot: (draft: ShotDraft) => void
   onUpdateShot: (id: string, draft: ShotDraft) => void
   onDeleteShot: (id: string, title: string) => void
-  onGenerateFromScript: () => void
+  onGenerateFromScript: (targetCount: number) => void
   onGenerateAllImages: () => void
   onGenerateSingleImage: (id: string) => void
 }
@@ -83,11 +83,17 @@ export function ShotPanel({
   const { t } = useTranslation()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [previewShotId, setPreviewShotId] = useState<string | null>(null)
+  const [targetShotCountInput, setTargetShotCountInput] = useState('20')
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState<ShotDraft>(emptyDraft)
 
   const previewShot = previewShotId ? shots.find((item) => item.id === previewShotId) ?? null : null
+  const targetShotCount = (() => {
+    const value = Number(targetShotCountInput)
+    if (!Number.isFinite(value)) return 20
+    return Math.max(1, Math.min(200, Math.round(value)))
+  })()
 
   const sceneNameMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -165,25 +171,41 @@ export function ShotPanel({
           <h2 className="text-lg font-semibold tracking-wide">{t('projectLibrary.shotPanelTitle')}</h2>
           <p className="text-xs text-base-content/60 mt-1">{t('projectLibrary.shotPanelSubtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-sm btn-outline"
-            onClick={onGenerateFromScript}
-            disabled={generatingAllImages || generatingFromScript}
-          >
-            <Camera size={12} />
-            {generatingFromScript ? t('projectLibrary.aiStreaming') : t('projectLibrary.shotGenerateFromScript')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-outline"
-            onClick={onGenerateAllImages}
-            disabled={generatingAllImages || generatingFromScript}
-          >
-            <Clapperboard size={12} />
-            {generatingAllImages ? t('projectLibrary.aiStreaming') : t('projectLibrary.shotGenerateAllImages')}
-          </button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <label className="input input-sm input-bordered flex items-center gap-2 w-32">
+              <span className="text-[11px] text-base-content/60 whitespace-nowrap">
+                {t('projectLibrary.shotTargetCountLabel')}
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={200}
+                className="w-full bg-transparent outline-none text-right"
+                value={targetShotCountInput}
+                onChange={(event) => setTargetShotCountInput(event.target.value)}
+                onBlur={() => setTargetShotCountInput(String(targetShotCount))}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline"
+              onClick={() => onGenerateFromScript(targetShotCount)}
+              disabled={generatingAllImages || generatingFromScript}
+            >
+              <Camera size={12} />
+              {generatingFromScript ? t('projectLibrary.aiStreaming') : t('projectLibrary.shotGenerateFromScript')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline"
+              onClick={onGenerateAllImages}
+              disabled={generatingAllImages || generatingFromScript}
+            >
+              <Clapperboard size={12} />
+              {generatingAllImages ? t('projectLibrary.aiStreaming') : t('projectLibrary.shotGenerateAllImages')}
+            </button>
+          </div>
         </div>
       </div>
 

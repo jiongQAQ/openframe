@@ -77,6 +77,7 @@ type PropRow = {
 }
 type SceneRow = {
   id: string
+  series_id?: string
   project_id: string
   title: string
   location: string
@@ -197,6 +198,7 @@ interface Window {
         evidence?: string
       }>
       props: Array<{ id: string; name: string; category?: string; description?: string }>
+      target_count?: number
       modelKey?: string
     }) => Promise<{ ok: true; shots: Array<{ title: string; scene_ref: string; character_refs: string[]; prop_refs: string[]; shot_size: string; camera_angle: string; camera_move: string; duration_sec: number; action: string; dialogue: string }> } | { ok: false; error: string }>
     scriptToolkit: (params: {

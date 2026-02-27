@@ -379,7 +379,8 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
 
     const prompt = [
       'Scene turnaround sheet, three-view composition: front view, left 45-degree view, right 45-degree view.',
-      'Environment-only scene. No people, no characters, no human silhouettes, no portraits, no text watermark.',
+      'Environment-only scene. No people, no characters, no human silhouettes, no portraits, no body parts, no face close-ups, no text watermark.',
+      'If any input mentions characters, dialogue, or actions, ignore them completely and keep only environmental design.',
       'Keep architecture, props, materials, and lighting style consistent across the three views.',
       `Project category: ${project?.category || 'unknown'}`,
       `Project style: ${project?.genre || 'unknown'}`,
@@ -387,8 +388,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       `Location: ${draft.location || 'unknown'}`,
       `Time: ${draft.time || 'unknown'}`,
       `Mood: ${draft.mood || 'unknown'}`,
-      `Description: ${draft.description || 'unknown'}`,
-      `Shot notes: ${draft.shot_notes || 'unknown'}`,
+      'Output requirement: environment and set design only.',
     ].join('\n')
 
     try {

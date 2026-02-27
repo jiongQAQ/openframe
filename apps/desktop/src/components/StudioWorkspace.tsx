@@ -20,6 +20,7 @@ type CharacterAge = Character['age']
 
 type Scene = {
   id: string
+  series_id?: string
   project_id: string
   title: string
   location: string
@@ -40,6 +41,8 @@ type StudioTaskItem = {
   message: string
   created_at: number
 }
+
+type WorkflowStepKey = 'script' | 'character' | 'prop' | 'storyboard' | 'shot' | 'production' | 'export'
 
 interface StudioWorkspaceProps {
   projectId: string
@@ -63,7 +66,7 @@ export function StudioWorkspace({
   scriptContent,
 }: StudioWorkspaceProps) {
   const { t } = useTranslation()
-  const [activeStep, setActiveStep] = useState<'script' | 'character' | 'prop' | 'storyboard' | 'shot' | 'production' | 'export'>('script')
+  const [activeStep, setActiveStep] = useState<WorkflowStepKey>('script')
   const [extractMode, setExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [propExtractMode, setPropExtractMode] = useState<'merge' | 'replace' | null>(null)
   const [sceneExtractMode, setSceneExtractMode] = useState<'merge' | 'replace' | null>(null)
@@ -266,7 +269,7 @@ export function StudioWorkspace({
       })
   }, [])
 
-  const workflowSteps = useMemo(
+  const workflowSteps = useMemo<Array<{ key: WorkflowStepKey; label: string }>>(
     () => [
       { key: 'script', label: t('projectLibrary.stepScript') },
       { key: 'character', label: t('projectLibrary.stepCharacter') },
@@ -277,6 +280,10 @@ export function StudioWorkspace({
       // { key: 'export', label: t('projectLibrary.stepExport') },
     ],
     [t],
+  )
+  const workflowStepOrder = useMemo<WorkflowStepKey[]>(
+    () => ['script', 'character', 'prop', 'storyboard', 'shot', 'production', 'export'],
+    [],
   )
 
   const showCharacterPanel = activeStep === 'character'
@@ -300,6 +307,67 @@ export function StudioWorkspace({
       })),
     [seriesShots],
   )
+  const workflowStepCompleted = useMemo<Record<WorkflowStepKey, boolean>>(
+    () => ({
+      script: scriptContent.trim().length > 0,
+      character: projectCharacters.length > 0,
+      prop: projectProps.length > 0,
+      storyboard: seriesScenes.length > 0,
+      shot: seriesShots.length > 0,
+      production: productionTimelineClips.length > 0,
+      export: Boolean(productionAutoEditVideo || productionTimelineClips.length > 0),
+    }),
+    [
+      productionAutoEditVideo,
+      productionTimelineClips.length,
+      projectCharacters.length,
+      projectProps.length,
+      scriptContent,
+      seriesScenes.length,
+      seriesShots.length,
+    ],
+  )
+  const workflowStepLabelMap = useMemo(
+    () => new Map(workflowSteps.map((step) => [step.key, step.label])),
+    [workflowSteps],
+  )
+
+  function canAccessStep(stepKey: WorkflowStepKey): boolean {
+    const targetIdx = workflowStepOrder.indexOf(stepKey)
+    if (targetIdx <= 0) return true
+    for (let i = 0; i < targetIdx; i += 1) {
+      if (!workflowStepCompleted[workflowStepOrder[i]]) return false
+    }
+    return true
+  }
+
+  function getStepBlockedReason(stepKey: WorkflowStepKey): string {
+    const targetIdx = workflowStepOrder.indexOf(stepKey)
+    if (targetIdx <= 0) return ''
+    for (let i = 0; i < targetIdx; i += 1) {
+      const prevStepKey = workflowStepOrder[i]
+      if (workflowStepCompleted[prevStepKey]) continue
+      return t('projectLibrary.stepLockedHint', {
+        step: workflowStepLabelMap.get(prevStepKey) ?? '',
+      })
+    }
+    return ''
+  }
+
+  useEffect(() => {
+    const activeStepIdx = workflowStepOrder.indexOf(activeStep)
+    if (activeStepIdx <= 0) return
+    const blocked = workflowStepOrder
+      .slice(0, activeStepIdx)
+      .some((stepKey) => !workflowStepCompleted[stepKey])
+    if (!blocked) return
+    const firstIncompleteIdx = workflowStepOrder.findIndex((stepKey) => !workflowStepCompleted[stepKey])
+    if (firstIncompleteIdx < 0) return
+    const fallbackStep = workflowStepOrder[firstIncompleteIdx]
+    if (fallbackStep !== activeStep) {
+      setActiveStep(fallbackStep)
+    }
+  }, [activeStep, workflowStepCompleted, workflowStepOrder])
 
   function normalizeCharacterName(name: string): string {
     return name.trim().toLowerCase()
@@ -1086,6 +1154,7 @@ export function StudioWorkspace({
 
         const extractedRows: Scene[] = result.scenes.map((item, index) => ({
           id: crypto.randomUUID(),
+          series_id: seriesId,
           project_id: projectId,
           title: item.title,
           location: item.location,
@@ -1098,8 +1167,12 @@ export function StudioWorkspace({
         }))
 
         const nextRows = mode === 'replace' ? extractedRows : mergeScenes(seriesScenes, extractedRows)
-        await window.scenesAPI.replaceByProject({ projectId, scenes: nextRows })
-        setSeriesScenes(nextRows)
+        const rowsForSave = nextRows.map((row) => ({
+          ...row,
+          series_id: row.series_id || seriesId,
+        }))
+        await window.scenesAPI.replaceByProject({ projectId, scenes: rowsForSave })
+        setSeriesScenes(rowsForSave)
       } catch {
         setSceneError(t('projectLibrary.aiToolkitFailed'))
       } finally {
@@ -1128,6 +1201,7 @@ export function StudioWorkspace({
     setSceneError('')
     const row: Scene = {
       id: crypto.randomUUID(),
+      series_id: seriesId,
       project_id: projectId,
       title: draft.title,
       location: draft.location,
@@ -1224,7 +1298,8 @@ export function StudioWorkspace({
     try {
       const prompt = [
         'Scene turnaround sheet, three-view composition: front view, left 45-degree view, right 45-degree view.',
-        'Environment-only scene. No people, no characters, no human silhouettes, no portraits.',
+        'Environment-only scene. No people, no characters, no human silhouettes, no portraits, no body parts, no face close-ups.',
+        'If any input mentions characters, dialogue, or actions, ignore them completely and keep only environmental design.',
         'Keep architecture, props, materials, and lighting style consistent across the three views.',
         'High quality, production-ready, no text watermark.',
         `Project category: ${projectCategory || 'unknown'}`,
@@ -1233,8 +1308,7 @@ export function StudioWorkspace({
         `Location: ${scene.location || 'unknown'}`,
         `Time: ${scene.time || 'unknown'}`,
         `Mood: ${scene.mood || 'unknown'}`,
-        `Scene description: ${scene.description || 'unknown'}`,
-        `Shot notes: ${scene.shot_notes || 'unknown'}`,
+        'Output requirement: environment and set design only.',
       ].join('\n')
 
       const result = await window.aiAPI.generateImage({
@@ -1435,7 +1509,7 @@ export function StudioWorkspace({
     }
   }
 
-  async function generateShotsFromScript() {
+  async function generateShotsFromScript(targetCount: number) {
     if (!scriptContent.trim()) {
       setShotError(t('projectLibrary.aiEditorEmpty'))
       return
@@ -1447,6 +1521,9 @@ export function StudioWorkspace({
 
     setGeneratingShotsFromScript(true)
     setShotError('')
+    const targetShotCount = Number.isFinite(targetCount)
+      ? Math.max(1, Math.min(200, Math.round(targetCount)))
+      : 20
     enqueueTask(t('projectLibrary.shotGenerateFromScript'), async () => {
       try {
         const result = await window.aiAPI.extractShotsFromScript({
@@ -1467,6 +1544,7 @@ export function StudioWorkspace({
             category: prop.category,
             description: prop.description,
           })),
+          target_count: targetShotCount,
           modelKey: selectedTextModelKey || undefined,
         })
 
@@ -2317,25 +2395,42 @@ export function StudioWorkspace({
           </div>
 
           <div className="flex items-center gap-2 text-xs overflow-x-auto px-2">
-            {workflowSteps.map((step, idx) => (
-              <button
-                key={step.key}
-                type="button"
-                onClick={() => {
-                  if (step.key === 'script' || step.key === 'character' || step.key === 'prop' || step.key === 'storyboard' || step.key === 'shot' || step.key === 'production' || step.key === 'export') setActiveStep(step.key)
-                }}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 border shrink-0 text-sm font-medium transition-colors ${
-                  (activeStep === 'script' && step.key === 'script') || (activeStep === 'character' && step.key === 'character') || (activeStep === 'prop' && step.key === 'prop') || (activeStep === 'storyboard' && step.key === 'storyboard') || (activeStep === 'shot' && step.key === 'shot') || (activeStep === 'production' && step.key === 'production') || (activeStep === 'export' && step.key === 'export')
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : idx <= 5
-                      ? 'border-base-300 hover:border-primary/30 text-base-content/70'
-                      : 'border-base-300 text-base-content/45'
-                }`}
-              >
-                <CheckCircle2 size={12} className={idx === 0 ? 'text-primary' : 'text-base-content/50'} />
-                {step.label}
-              </button>
-            ))}
+            {workflowSteps.map((step) => {
+              const isActive = activeStep === step.key
+              const canOpen = canAccessStep(step.key)
+              const isCompleted = workflowStepCompleted[step.key]
+              const blockedReason = canOpen ? '' : getStepBlockedReason(step.key)
+              return (
+                <button
+                  key={step.key}
+                  type="button"
+                  onClick={() => setActiveStep(step.key)}
+                  disabled={!canOpen}
+                  title={blockedReason || undefined}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 border shrink-0 text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'border-primary/40 bg-primary/10 text-primary'
+                      : canOpen
+                        ? 'border-base-300 hover:border-primary/30 text-base-content/70'
+                        : 'border-base-300 text-base-content/40 cursor-not-allowed opacity-70'
+                  }`}
+                >
+                  <CheckCircle2
+                    size={12}
+                    className={
+                      isCompleted
+                        ? 'text-success'
+                        : isActive
+                          ? 'text-primary'
+                          : canOpen
+                            ? 'text-base-content/50'
+                            : 'text-base-content/35'
+                    }
+                  />
+                  {step.label}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
@@ -2407,7 +2502,7 @@ export function StudioWorkspace({
             onAddShot={addShot}
             onUpdateShot={updateShot}
             onDeleteShot={deleteShot}
-            onGenerateFromScript={() => void generateShotsFromScript()}
+            onGenerateFromScript={(targetCount) => void generateShotsFromScript(targetCount)}
             onGenerateAllImages={() => void generateAllShotImages()}
             onGenerateSingleImage={(id) => queueGenerateSingleShotImage(id)}
           />
