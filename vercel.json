@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile --ignore-scripts --filter openframe-web... --filter openframe-ui...",
-  "buildCommand": "pnpm --filter openframe-web build && rm -rf dist && cp -R apps/web/dist dist",
+  "buildCommand": "if [ -f apps/web/package.json ]; then pnpm -C apps/web build && rm -rf dist && mkdir -p dist && cp -R apps/web/dist/. dist/; else pnpm build; fi",
   "devCommand": "pnpm --filter openframe-web dev",
   "outputDirectory": "dist",
   "rewrites": [
