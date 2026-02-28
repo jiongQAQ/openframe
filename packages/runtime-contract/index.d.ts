@@ -310,6 +310,7 @@ interface Window {
   }
   windowAPI: {
     openStudio: (payload: { projectId: string; seriesId: string }) => Promise<void>
+    openExternal: (url: string) => Promise<void>
   }
   mediaAPI: {
     autoEdit: (payload: {

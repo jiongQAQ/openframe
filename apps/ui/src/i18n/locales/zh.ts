@@ -5,6 +5,7 @@ export default {
     prompts: '提示词管理',
     list: '风格库',
     settings: '设置',
+    github: 'GitHub',
   },
   common: {
     user: '用户',

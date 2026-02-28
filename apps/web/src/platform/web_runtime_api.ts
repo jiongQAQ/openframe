@@ -68,6 +68,33 @@ type VectorChunkRow = {
   created_at: number
 }
 
+type MediaClip = {
+  shotId: string
+  path: string
+  title?: string
+  trimStartSec?: number
+  trimEndSec?: number
+}
+
+type TimelineExportPayload = {
+  orderedShotIds: string[]
+  clips: MediaClip[]
+}
+
+type ExportMergedVideoPayload = TimelineExportPayload & {
+  ratio: '16:9' | '9:16'
+}
+
+type ExportFcpxmlPayload = TimelineExportPayload & {
+  ratio: '16:9' | '9:16'
+  projectName?: string
+}
+
+type ExportEdlPayload = TimelineExportPayload & {
+  projectName?: string
+  fps?: number
+}
+
 const SETTINGS_KEYS = [
   'language',
   'theme',
@@ -85,6 +112,7 @@ const DATA_DIR_KEY = 'openframe:web:data_dir'
 const DEFAULT_DATA_DIR = 'browser://indexeddb'
 
 let dbPromise: Promise<IDBDatabase> | null = null
+let mergedVideoPreviewUrl: string | null = null
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -257,6 +285,208 @@ function buildPropLinkId(seriesId: string, propId: string): string {
   return `${seriesId}::${propId}`
 }
 
+function escapeXml(value: string): string {
+  return value
+    .split('&').join('&amp;')
+    .split('<').join('&lt;')
+    .split('>').join('&gt;')
+    .split('"').join('&quot;')
+    .split("'").join('&apos;')
+}
+
+function secToFcpxTime(seconds: number, fps = 30): string {
+  const frames = Math.max(1, Math.round(seconds * fps))
+  return `${String(frames)}/${String(fps)}s`
+}
+
+function formatResourceByRatio(
+  ratio: '16:9' | '9:16',
+): { width: number; height: number; formatName: string } {
+  if (ratio === '9:16') {
+    return {
+      width: 1080,
+      height: 1920,
+      formatName: 'FFVideoFormatVertical1080x1920p30',
+    }
+  }
+  return {
+    width: 1920,
+    height: 1080,
+    formatName: 'FFVideoFormat1080p30',
+  }
+}
+
+function sanitizeReelName(value: string): string {
+  const normalized = value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+  if (!normalized) return 'OPENFRM'
+  return normalized.slice(0, 8)
+}
+
+function framesToTimecode(totalFrames: number, fps: number): string {
+  const safeFrames = Math.max(0, Math.floor(totalFrames))
+  const frames = safeFrames % fps
+  const totalSeconds = Math.floor(safeFrames / fps)
+  const seconds = totalSeconds % 60
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  const minutes = totalMinutes % 60
+  const hours = Math.floor(totalMinutes / 60)
+
+  const pad2 = (value: number) => String(value).padStart(2, '0')
+  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}:${pad2(frames)}`
+}
+
+function getBasename(pathLike: string): string {
+  const normalized = (pathLike || '')
+    .split('?')[0]
+    .split('#')[0]
+  const parts = normalized.split(/[\\/]/)
+  return parts[parts.length - 1] || ''
+}
+
+function getBasenameWithoutExt(pathLike: string): string {
+  const basename = getBasename(pathLike)
+  const extIndex = basename.lastIndexOf('.')
+  if (extIndex <= 0) return basename
+  return basename.slice(0, extIndex)
+}
+
+function pickExportClips(payload: TimelineExportPayload): MediaClip[] {
+  const clipByShotId = new Map(payload.clips.map((clip) => [clip.shotId, clip]))
+  const orderedClips = payload.orderedShotIds
+    .map((shotId) => clipByShotId.get(shotId))
+    .filter(Boolean) as MediaClip[]
+
+  return orderedClips.length > 0 ? orderedClips : payload.clips
+}
+
+function downloadTextFile(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` })
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  anchor.style.display = 'none'
+  const container = document.body ?? document.documentElement
+  container.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl)
+  }, 1000)
+}
+
+function buildEdlContent(payload: ExportEdlPayload): string {
+  const selectedClips = pickExportClips(payload)
+  if (selectedClips.length === 0) {
+    throw new Error('No clips available for EDL export')
+  }
+
+  const fps = Math.max(1, Math.floor(payload.fps ?? 30))
+  const projectName = (payload.projectName || 'OpenFrame Export').trim() || 'OpenFrame Export'
+  const title = sanitizeReelName(projectName)
+
+  let recordStartFrames = 0
+  const lines: string[] = [
+    `TITLE: ${title}`,
+    'FCM: NON-DROP FRAME',
+    '',
+  ]
+
+  selectedClips.forEach((clip, index) => {
+    const trimStartSec = Math.max(0, clip.trimStartSec ?? 0)
+    const trimEndRaw = clip.trimEndSec ?? trimStartSec + 3
+    const durationSec = Math.max(0.1, trimEndRaw - trimStartSec)
+
+    const sourceInFrames = Math.round(trimStartSec * fps)
+    const sourceOutFrames = sourceInFrames + Math.max(1, Math.round(durationSec * fps))
+    const recordInFrames = recordStartFrames
+    const recordOutFrames = recordInFrames + (sourceOutFrames - sourceInFrames)
+    recordStartFrames = recordOutFrames
+
+    const eventNo = String(index + 1).padStart(3, '0')
+    const reelName = sanitizeReelName(
+      clip.title || getBasenameWithoutExt(clip.path) || `SHOT${eventNo}`,
+    )
+    const clipName = (clip.title || getBasename(clip.path)).trim() || `Shot ${eventNo}`
+
+    lines.push(
+      `${eventNo}  ${reelName} V     C        ${framesToTimecode(sourceInFrames, fps)} ${framesToTimecode(sourceOutFrames, fps)} ${framesToTimecode(recordInFrames, fps)} ${framesToTimecode(recordOutFrames, fps)}`,
+      `* FROM CLIP NAME: ${clipName}`,
+      `* SOURCE FILE: ${clip.path}`,
+      '',
+    )
+  })
+
+  return `${lines.join('\n')}\n`
+}
+
+function buildFcpxmlContent(payload: ExportFcpxmlPayload): string {
+  const selectedClips = pickExportClips(payload)
+  if (selectedClips.length === 0) {
+    throw new Error('No clips available for FCPXML export')
+  }
+
+  const fps = 30
+  const format = formatResourceByRatio(payload.ratio)
+  const projectName = (payload.projectName || 'OpenFrame Export').trim() || 'OpenFrame Export'
+
+  const assets = selectedClips.map((clip, index) => {
+    const trimStartSec = Math.max(0, clip.trimStartSec ?? 0)
+    const trimEndRaw = clip.trimEndSec ?? trimStartSec + 3
+    const trimDurationSec = Math.max(0.1, trimEndRaw - trimStartSec)
+    const fallbackName = `Shot ${String(index + 1)}`
+    return {
+      id: `r_asset_${String(index + 1)}`,
+      name: (clip.title || getBasenameWithoutExt(clip.path) || fallbackName).trim() || fallbackName,
+      uid: clip.path,
+      mediaSrc: clip.path,
+      startSec: trimStartSec,
+      durationSec: trimDurationSec,
+    }
+  })
+
+  let timelineOffsetSec = 0
+  const spineClips = assets.map((asset) => {
+    const clip = {
+      ...asset,
+      offsetSec: timelineOffsetSec,
+    }
+    timelineOffsetSec += asset.durationSec
+    return clip
+  })
+
+  const totalDurationSec = Math.max(0.1, spineClips.reduce((sum, clip) => sum + clip.durationSec, 0))
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE fcpxml>',
+    '<fcpxml version="1.11">',
+    '  <resources>',
+    `    <format id="r_format" name="${escapeXml(format.formatName)}" frameDuration="1/${String(fps)}s" width="${String(format.width)}" height="${String(format.height)}" colorSpace="1-1-1 (Rec. 709)"/>`,
+    ...assets.flatMap((asset) => [
+      `    <asset id="${asset.id}" name="${escapeXml(asset.name)}" uid="${escapeXml(asset.uid)}" start="${secToFcpxTime(asset.startSec, fps)}" duration="${secToFcpxTime(asset.durationSec, fps)}" hasVideo="1" hasAudio="0" format="r_format">`,
+      `      <media-rep kind="original-media" src="${escapeXml(asset.mediaSrc)}"/>`,
+      '    </asset>',
+    ]),
+    '  </resources>',
+    '  <library>',
+    `    <event name="${escapeXml(projectName)}">`,
+    `      <project name="${escapeXml(`${projectName} Timeline`)}">`,
+    `        <sequence format="r_format" duration="${secToFcpxTime(totalDurationSec, fps)}" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">`,
+    '          <spine>',
+    ...spineClips.map((clip) =>
+      `            <asset-clip name="${escapeXml(clip.name)}" ref="${clip.id}" offset="${secToFcpxTime(clip.offsetSec, fps)}" start="${secToFcpxTime(clip.startSec, fps)}" duration="${secToFcpxTime(clip.durationSec, fps)}"/>`),
+    '          </spine>',
+    '        </sequence>',
+    '      </project>',
+    '    </event>',
+    '  </library>',
+    '</fcpxml>',
+  ].join('\n')
+}
+
 function getSettingStorageKey(key: AllowedSettingKey): string {
   return `${SETTINGS_PREFIX}${key}`
 }
@@ -373,6 +603,268 @@ async function readMediaAsDataUrl(path: string): Promise<string | null> {
   }
 
   return null
+}
+
+function triggerDownload(objectUrl: string, filename: string): void {
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  anchor.style.display = 'none'
+  const container = document.body ?? document.documentElement
+  container.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
+function pickMergeRecorderMimeType(): string {
+  if (typeof MediaRecorder === 'undefined') return ''
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4',
+  ]
+  const matched = candidates.find((value) => MediaRecorder.isTypeSupported(value))
+  return matched ?? ''
+}
+
+function nextAnimationFrame(): Promise<number> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame((timestamp) => resolve(timestamp))
+  })
+}
+
+function drawVideoFrameContain(
+  context: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  outputWidth: number,
+  outputHeight: number,
+): void {
+  const sourceWidth = video.videoWidth || outputWidth
+  const sourceHeight = video.videoHeight || outputHeight
+  const scale = Math.min(outputWidth / sourceWidth, outputHeight / sourceHeight)
+  const drawWidth = sourceWidth * scale
+  const drawHeight = sourceHeight * scale
+  const drawX = (outputWidth - drawWidth) / 2
+  const drawY = (outputHeight - drawHeight) / 2
+
+  context.fillStyle = '#000000'
+  context.fillRect(0, 0, outputWidth, outputHeight)
+  context.drawImage(video, drawX, drawY, drawWidth, drawHeight)
+}
+
+function loadVideoMetadata(video: HTMLVideoElement, src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('loadedmetadata', onLoaded)
+      video.removeEventListener('error', onError)
+    }
+    const onLoaded = () => {
+      cleanup()
+      resolve()
+    }
+    const onError = () => {
+      cleanup()
+      reject(new Error('Failed to load source clip for merged export'))
+    }
+
+    video.addEventListener('loadedmetadata', onLoaded)
+    video.addEventListener('error', onError)
+    video.src = src
+    video.load()
+  })
+}
+
+function seekVideo(video: HTMLVideoElement, nextTimeSec: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const target = Math.max(0, nextTimeSec)
+    if (Math.abs(video.currentTime - target) < 0.02) {
+      resolve()
+      return
+    }
+
+    const cleanup = () => {
+      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('error', onError)
+    }
+    const onSeeked = () => {
+      cleanup()
+      resolve()
+    }
+    const onError = () => {
+      cleanup()
+      reject(new Error('Failed to seek source clip for merged export'))
+    }
+
+    video.addEventListener('seeked', onSeeked)
+    video.addEventListener('error', onError)
+    video.currentTime = target
+  })
+}
+
+function stopMediaStream(stream: MediaStream): void {
+  stream.getTracks().forEach((track) => {
+    track.stop()
+  })
+}
+
+async function resolveClipSourceForMerge(path: string): Promise<string> {
+  if (!path) return ''
+  if (/^(data:|blob:)/i.test(path)) return path
+  if (/^(openframe-thumb:|https?:)/i.test(path)) {
+    return (await readMediaAsDataUrl(path)) || path
+  }
+  return path
+}
+
+async function renderClipRangeToCanvas(args: {
+  video: HTMLVideoElement
+  context: CanvasRenderingContext2D
+  outputWidth: number
+  outputHeight: number
+  trimStartSec: number
+  trimEndSec: number
+  fps: number
+}): Promise<void> {
+  const { video, context, outputWidth, outputHeight, trimStartSec, trimEndSec, fps } = args
+  const minDuration = 1 / fps
+  const safeEndSec = Math.max(trimStartSec + minDuration, trimEndSec)
+
+  await seekVideo(video, trimStartSec)
+  drawVideoFrameContain(context, video, outputWidth, outputHeight)
+
+  try {
+    await video.play()
+  } catch {
+    throw new Error('Browser blocked clip playback during merged export')
+  }
+
+  const endThreshold = 1 / fps
+  while (video.currentTime < safeEndSec - endThreshold && !video.ended) {
+    drawVideoFrameContain(context, video, outputWidth, outputHeight)
+    await nextAnimationFrame()
+  }
+
+  video.pause()
+  await seekVideo(video, safeEndSec)
+  drawVideoFrameContain(context, video, outputWidth, outputHeight)
+}
+
+async function exportMergedVideoInBrowser(payload: ExportMergedVideoPayload): Promise<{ outputPath: string }> {
+  const selectedClips = pickExportClips(payload)
+  if (selectedClips.length === 0) {
+    throw new Error('No clips available for merged video export')
+  }
+  if (typeof MediaRecorder === 'undefined') {
+    throw new Error('MediaRecorder is unavailable in this browser')
+  }
+
+  const mimeType = pickMergeRecorderMimeType()
+  const fps = 30
+  const { width, height } = formatResourceByRatio(payload.ratio)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('Unable to initialize canvas for merged export')
+  }
+
+  const stream = canvas.captureStream(fps)
+  const recorder = mimeType
+    ? new MediaRecorder(stream, { mimeType })
+    : new MediaRecorder(stream)
+  const chunks: BlobPart[] = []
+  const video = document.createElement('video')
+  video.muted = true
+  video.playsInline = true
+  video.preload = 'auto'
+
+  const blobPromise = new Promise<Blob>((resolve, reject) => {
+    recorder.addEventListener('dataavailable', (event) => {
+      if (event.data && event.data.size > 0) chunks.push(event.data)
+    })
+    recorder.addEventListener('stop', () => {
+      if (chunks.length === 0) {
+        reject(new Error('Merged export produced empty output'))
+        return
+      }
+      const firstChunk = chunks[0]
+      const fallbackType = firstChunk instanceof Blob ? firstChunk.type : 'video/webm'
+      const outputType = mimeType || fallbackType || 'video/webm'
+      resolve(new Blob(chunks, { type: outputType || 'video/webm' }))
+    })
+    recorder.addEventListener('error', () => {
+      reject(new Error('MediaRecorder failed during merged export'))
+    })
+  })
+
+  let recorderStarted = false
+  let mergeError: Error | null = null
+
+  try {
+    recorder.start(250)
+    recorderStarted = true
+    for (const clip of selectedClips) {
+      const source = await resolveClipSourceForMerge(clip.path)
+      if (!source) {
+        throw new Error('Source clip is missing or unsupported')
+      }
+      await loadVideoMetadata(video, source)
+
+      const trimStartSec = Math.max(0, clip.trimStartSec ?? 0)
+      const trimEndRaw = clip.trimEndSec ?? trimStartSec + 3
+      const clipDuration = Number.isFinite(video.duration) && video.duration > 0
+        ? video.duration
+        : trimEndRaw
+      const trimEndSec = Math.max(
+        trimStartSec + 0.1,
+        Math.min(trimEndRaw, clipDuration),
+      )
+
+      await renderClipRangeToCanvas({
+        video,
+        context,
+        outputWidth: width,
+        outputHeight: height,
+        trimStartSec,
+        trimEndSec,
+        fps,
+      })
+    }
+  } catch (error) {
+    mergeError = error instanceof Error ? error : new Error(String(error))
+  } finally {
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+    if (recorderStarted && recorder.state !== 'inactive') {
+      recorder.stop()
+    }
+  }
+
+  try {
+    if (!recorderStarted) {
+      throw mergeError ?? new Error('Merged export failed before recording started')
+    }
+
+    const blob = await blobPromise
+    if (mergeError) {
+      throw mergeError
+    }
+
+    if (mergedVideoPreviewUrl) {
+      URL.revokeObjectURL(mergedVideoPreviewUrl)
+    }
+    mergedVideoPreviewUrl = URL.createObjectURL(blob)
+
+    const runId = Date.now().toString(36)
+    triggerDownload(mergedVideoPreviewUrl, `merged_${runId}.webm`)
+    return { outputPath: mergedVideoPreviewUrl }
+  } finally {
+    stopMediaStream(stream)
+  }
 }
 
 function cosineDistance(left: number[], right: number[]): number {
@@ -1139,6 +1631,9 @@ export function ensureWebRuntimeAPIs(): void {
       const nextHash = `#/projects/${encodeURIComponent(payload.projectId)}?studio=1&seriesId=${encodeURIComponent(payload.seriesId)}`
       window.location.hash = nextHash
     },
+    openExternal: async (url: string) => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    },
   }
 
   runtimeWindow.mediaAPI = {
@@ -1147,13 +1642,23 @@ export function ensureWebRuntimeAPIs(): void {
       if (!first) throw new Error('No clip available for auto edit')
       return { outputPath: first }
     },
-    exportMergedVideo: async (payload) => {
-      const first = payload.clips[0]?.path
-      if (!first) return { canceled: true }
-      return { outputPath: first }
+    exportMergedVideo: async (payload: ExportMergedVideoPayload) => {
+      return exportMergedVideoInBrowser(payload)
     },
-    exportFcpxml: async () => ({ canceled: true }),
-    exportEdl: async () => ({ canceled: true }),
+    exportFcpxml: async (payload: ExportFcpxmlPayload) => {
+      const runId = Date.now().toString(36)
+      const filename = `timeline_${runId}.fcpxml`
+      const content = buildFcpxmlContent(payload)
+      downloadTextFile(content, filename, 'application/xml')
+      return { outputPath: filename }
+    },
+    exportEdl: async (payload: ExportEdlPayload) => {
+      const runId = Date.now().toString(36)
+      const filename = `timeline_${runId}.edl`
+      const content = buildEdlContent(payload)
+      downloadTextFile(content, filename, 'text/plain')
+      return { outputPath: filename }
+    },
   }
 
   runtimeWindow.aiAPI = createWebAiApi({

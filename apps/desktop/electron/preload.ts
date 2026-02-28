@@ -419,6 +419,8 @@ contextBridge.exposeInMainWorld('shotsAPI', {
 contextBridge.exposeInMainWorld('windowAPI', {
   openStudio: (payload: { projectId: string; seriesId: string }): Promise<void> =>
     ipcRenderer.invoke('window:openStudio', payload),
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke('window:openExternal', url),
 })
 
 contextBridge.exposeInMainWorld('mediaAPI', {

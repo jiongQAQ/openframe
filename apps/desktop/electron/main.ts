@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, protocol, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, protocol, screen, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fsSync from 'node:fs'
@@ -56,6 +56,15 @@ function contentTypeFromPath(filePath: string): string {
   if (ext === '.webm') return 'video/webm'
   if (ext === '.mov') return 'video/quicktime'
   return 'application/octet-stream'
+}
+
+function isAllowedExternalUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 function createWindow() {
@@ -235,6 +244,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle('window:openStudio', (_event, payload: { projectId: string; seriesId: string }) => {
     createStudioWindow(payload.projectId, payload.seriesId)
+  })
+
+  ipcMain.handle('window:openExternal', async (_event, url: string) => {
+    if (!isAllowedExternalUrl(url)) {
+      throw new Error('Invalid external URL')
+    }
+    await shell.openExternal(url)
   })
 
   createWindow()

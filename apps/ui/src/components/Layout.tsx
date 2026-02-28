@@ -3,6 +3,7 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import {
   FolderOpen,
+  Github,
   MessageSquare,
   SwatchBook,
   Settings,
@@ -23,6 +24,7 @@ const menuItems: MenuItem[] = [
   { to: '/genres', icon: SwatchBook, labelKey: 'menu.list' },
   { to: '/prompts', icon: MessageSquare, labelKey: 'menu.prompts' },
 ]
+const GITHUB_REPO_URL = 'https://github.com/murongg/openframe'
 const ONBOARDING_VERSION = '5'
 
 interface LayoutProps {
@@ -43,6 +45,10 @@ export default function Layout({ children }: LayoutProps) {
     const params = new URLSearchParams(location.search)
     return params.get('studio') === '1'
   }, [location.search])
+
+  const handleOpenGithub = useCallback(() => {
+    void window.windowAPI.openExternal(GITHUB_REPO_URL)
+  }, [])
 
   const markOnboardingSeen = useCallback(() => {
     setOnboardingPending(false)
@@ -259,6 +265,13 @@ export default function Layout({ children }: LayoutProps) {
               >
                 <Settings size={16} />
                 <span className="text-sm">{t('menu.settings')}</span>
+              </button>
+              <button
+                className="flex items-center gap-2 w-full rounded-lg px-2 py-2 transition-colors hover:bg-base-300 text-left"
+                onClick={handleOpenGithub}
+              >
+                <Github size={16} />
+                <span className="text-sm">{t('menu.github')}</span>
               </button>
             </div>
 

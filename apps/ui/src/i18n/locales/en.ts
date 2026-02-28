@@ -5,6 +5,7 @@ export default {
     prompts: 'Prompt Manager',
     list: 'Style Library',
     settings: 'Settings',
+    github: 'GitHub',
   },
   common: {
     user: 'User',
