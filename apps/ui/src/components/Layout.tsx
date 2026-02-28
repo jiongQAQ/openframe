@@ -187,7 +187,7 @@ export default function Layout({ children }: LayoutProps) {
       disposed = true
       window.clearTimeout(timer)
     }
-  }, [isStudioWindow, markOnboardingSeen, onboardingPending, t])
+  }, [isStudioWindow, markOnboardingSeen, navigate, onboardingPending, t])
 
   if (isStudioWindow) {
     return (

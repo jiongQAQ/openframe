@@ -1,4 +1,6 @@
-import { CheckCircle2, Clock3, Loader2, ListChecks, ScrollText, Sparkles, Trash2, XCircle } from 'lucide-react'
+import { useCallback, useMemo } from 'react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
+import { CheckCircle2, ChevronLeft, Clock3, Loader2, ListChecks, ScrollText, Sparkles, Trash2, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { CharacterPanel } from './CharacterPanel'
 import { ProductionWorkspacePanel } from './ProductionWorkspacePanel'
@@ -20,6 +22,25 @@ function renderTaskStatusIcon(status: StudioTaskStatus) {
 
 export function StudioWorkspace(props: StudioWorkspaceProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { location } = useRouterState()
+  const isDesktopRuntime = useMemo(
+    () => typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent),
+    [],
+  )
+  const handleWebStudioBack = useCallback(() => {
+    const params = new URLSearchParams(location.search)
+    params.delete('studio')
+    const search = params.toString()
+    const nextHash = `#${location.pathname}${search ? `?${search}` : ''}`
+
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash
+      return
+    }
+
+    void navigate({ to: '/projects' })
+  }, [location.pathname, location.search, navigate])
   const {
     activeStep,
     workflowSteps,
@@ -62,9 +83,21 @@ export function StudioWorkspace(props: StudioWorkspaceProps) {
     <main className="h-full w-full overflow-hidden flex flex-col bg-linear-to-br from-base-200/40 via-base-100 to-base-200/30 text-base-content">
       <div className="sticky top-0 z-10 border-b border-base-300 bg-base-100/90 backdrop-blur">
         <div className="relative px-4 py-3 flex items-center justify-center">
-          <div className="absolute left-4 min-w-0">
-            <p className="truncate text-sm font-semibold">{props.projectName}</p>
-            <p className="truncate text-xs text-base-content/60">{props.seriesTitle}</p>
+          <div className="absolute left-4 min-w-0 flex items-center gap-2">
+            {!isDesktopRuntime ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={handleWebStudioBack}
+                title={t('onboarding.back')}
+              >
+                <ChevronLeft size={12} />
+              </button>
+            ) : null}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{props.projectName}</p>
+              <p className="truncate text-xs text-base-content/60">{props.seriesTitle}</p>
+            </div>
           </div>
 
           <div className="absolute right-4 hidden xl:flex items-center gap-2">
