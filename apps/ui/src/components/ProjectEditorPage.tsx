@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from '@tanstack/react-db'
 import { ArrowLeft, Check, ChevronsUpDown, Search } from 'lucide-react'
+import { buildProjectThumbnailPrompt } from '@openframe/prompts'
 import { PROJECT_CATEGORIES } from '@openframe/shared'
 import { projectsCollection } from '../db/projects_collection'
 import { genresCollection } from '../db/genres_collection'
@@ -402,17 +403,14 @@ export function ProjectEditorPage({ projectId }: { projectId?: string }) {
                     .map((id) => PROJECT_CATEGORIES.find((item) => item.id === id)?.locales[localeKey] ?? id)
                     .join(', ')
                   const genreName = selectedGenre.name
-                  const ratioHint = form.video_ratio === '9:16' ? 'vertical mobile frame' : 'cinematic wide frame'
 
                   return {
-                    prompt: [
-                      'Create a high-quality cinematic project thumbnail image.',
-                      `Category: ${categoryNames}.`,
-                      `Project name concept: ${name}.`,
-                      `Style genre: ${genreName}.`,
-                      `Aspect ratio: ${form.video_ratio}, ${ratioHint}.`,
-                      'No text, no watermark, dramatic lighting, strong composition, highly detailed.',
-                    ].join(' '),
+                    prompt: buildProjectThumbnailPrompt({
+                      categoryNames,
+                      projectName: name,
+                      genreName,
+                      ratio: form.video_ratio,
+                    }),
                   }
                 }}
                 texts={{

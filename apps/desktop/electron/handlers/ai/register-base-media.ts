@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { embed, embedMany, generateText } from 'ai'
+import { CONNECTION_TEST_PROMPT } from '@openframe/prompts'
 import {
   createProviderModel,
   isLanguageModel,
@@ -44,7 +45,7 @@ export function registerAIBaseAndMediaHandlers() {
         if (!model) return { ok: false, error: 'Provider not supported' }
         if (!isLanguageModel(model)) return { ok: false, error: 'Model type cannot be tested' }
 
-        await generateText({ model, prompt: 'hi', maxOutputTokens: 1 })
+        await generateText({ model, prompt: CONNECTION_TEST_PROMPT, maxOutputTokens: 1 })
         return { ok: true }
       } catch (err: unknown) {
         return { ok: false, error: shortError(err) }

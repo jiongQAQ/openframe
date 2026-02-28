@@ -20,6 +20,9 @@ importers:
       '@openframe/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@openframe/prompts':
+        specifier: workspace:*
+        version: link:../../packages/prompts
       '@openframe/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -162,6 +165,9 @@ importers:
 
   apps/ui:
     dependencies:
+      '@openframe/prompts':
+        specifier: workspace:*
+        version: link:../../packages/prompts
       '@openframe/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -253,6 +259,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@openframe/prompts':
+        specifier: workspace:*
+        version: link:../../packages/prompts
       '@openframe/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -335,6 +344,8 @@ importers:
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.1(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.6.2)
+
+  packages/prompts: {}
 
   packages/providers:
     dependencies:

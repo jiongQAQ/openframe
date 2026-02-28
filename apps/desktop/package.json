@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@openframe/db": "workspace:*",
+    "@openframe/prompts": "workspace:*",
     "@openframe/providers": "workspace:*",
     "@openframe/runtime-contract": "workspace:*",
     "@openframe/shared": "workspace:*",

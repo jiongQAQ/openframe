@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
+import { buildPropStyleSuffix } from '@openframe/prompts'
 import type { Prop } from '../../db/props_collection'
 import type { CreatePropDraft } from './types'
 import {
@@ -55,28 +56,6 @@ function extFromMediaType(mediaType: string | undefined): string {
     default:
       return 'png'
   }
-}
-
-function isAnimeStyle(style: string): boolean {
-  return /(动漫|二次元|anime|manga|cartoon|toon|cel[-\s]?shad)/i.test(style)
-}
-
-function buildPropStyleSuffix(style: string): string {
-  const lines = [
-    'Hard requirements:',
-    '- Output ONE prop turnaround sheet with exactly three views of the SAME prop: front view, side view, and back view.',
-    '- Keep shape, size proportion, material, color scheme, and structural details fully consistent across all three views.',
-    '- Strictly follow the provided "Project style" in line quality, shape language, color design, and lighting.',
-    '- Keep output as a single clean prop reference image, no human subject, no typography, no logos.',
-  ]
-
-  if (isAnimeStyle(style)) {
-    lines.push('- Anime illustration style only: clean line art + cel-shaded rendering. Avoid photorealistic texture, camera lens realism, and live-action look.')
-  } else {
-    lines.push('- Do not shift to photorealistic style unless the project style explicitly requests realism.')
-  }
-
-  return lines.join('\n')
 }
 
 function normalizePropName(name: string): string {

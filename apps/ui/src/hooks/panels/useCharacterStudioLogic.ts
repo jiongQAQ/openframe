@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
+import { TURNAROUND_THREE_VIEW_SUFFIX } from '@openframe/prompts'
 import type { Character } from '../../db/characters_collection'
 import type { CharacterRelation } from '../../db/character_relations_collection'
 import type { CreateCharacterDraft } from './types'
@@ -92,14 +93,6 @@ function extFromMediaType(mediaType: string | undefined): string {
       return 'png'
   }
 }
-
-const TURNAROUND_THREE_VIEW_SUFFIX = [
-  'Hard requirements:',
-  '- Output a single turnaround sheet with exactly three full-body views of the SAME character: front view, side profile view, and back view.',
-  '- Keep hairstyle, face shape, costume details, color palette, and body proportion fully consistent across all three views.',
-  '- Anime style only. Avoid photorealistic skin, lens effects, and real-person facial rendering.',
-  '- No extra characters, no scene background storytelling, no text overlays.',
-].join('\n')
 
 function mergeCharacterValues(base: Character, incoming: Character): Character {
   return {

@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { generateText, streamText } from 'ai'
 import type { AIConfig } from '@openframe/providers'
+import { buildStyleAgentPrompt } from '@openframe/prompts'
 import { store } from '../../store'
 import { resolveTextModel } from './model'
 import {
@@ -25,31 +26,10 @@ export function registerAIStyleAndScriptHandlers() {
       const model = resolveTextModel(config, params.modelKey)
       if (!model) return { ok: false, error: 'No default text model configured.' }
 
-      const conversation = params.messages
-        .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`)
-        .join('\n\n')
-
-      const instruction = [
-        'You are a style-library creation agent for an image/video prompt app.',
-        'Based on the conversation and current draft, suggest improved values.',
-        'In draft.prompt, NEVER include CLI-style flags or suffix params such as "--ar 16:9", "--stylize 300", "--v 6", etc.',
-        'Write natural prompt text only.',
-        'Return STRICT JSON only. No markdown. No extra text.',
-        'JSON shape:',
-        '{',
-        '  "reply": "short conversational reply in same language as user",',
-        '  "draft": {',
-        '    "name": "style name",',
-        '    "code": "snake_case_code",',
-        '    "description": "short description",',
-        '    "prompt": "full reusable prompt template"',
-        '  }',
-        '}',
-        'If a field should stay unchanged, copy it from current draft.',
-      ].join('\n')
-
-      const currentDraft = JSON.stringify(params.draft)
-      const prompt = `${instruction}\n\nCurrent draft:\n${currentDraft}\n\nConversation:\n${conversation}`
+      const prompt = buildStyleAgentPrompt({
+        messages: params.messages,
+        draft: params.draft,
+      })
 
       try {
         const { text } = await generateText({ model, prompt })

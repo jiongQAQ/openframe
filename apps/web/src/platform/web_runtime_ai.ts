@@ -1,6 +1,12 @@
 import { embed, embedMany, generateText } from 'ai'
 import type { AIConfig } from '@openframe/providers'
 import {
+  buildExtractionPrompt,
+  buildStyleAgentPrompt,
+  CONNECTION_TEST_PROMPT,
+  getExtractionOutputLanguageRules,
+} from '@openframe/prompts'
+import {
   createProviderModel,
   generateImageWithProviderSupport,
   generateVideoWithProviderSupport,
@@ -41,29 +47,6 @@ function shortError(err: unknown): string {
     return 'Network request failed in browser. 请确认已部署 `/api/ai`。'
   }
   return msg.split('\n')[0].slice(0, 200)
-}
-
-function detectScriptLanguage(script: string): 'zh' | 'en' {
-  const chineseChars = (script.match(/[\u4e00-\u9fff]/g) || []).length
-  const latinChars = (script.match(/[A-Za-z]/g) || []).length
-  return chineseChars >= latinChars ? 'zh' : 'en'
-}
-
-function getOutputLanguageRules(script: string): {
-  outputLanguage: 'Simplified Chinese' | 'English'
-  languageRule: string
-} {
-  const isZh = detectScriptLanguage(script) === 'zh'
-  if (isZh) {
-    return {
-      outputLanguage: 'Simplified Chinese',
-      languageRule: 'If script is Chinese, keep output in Simplified Chinese unless source uses fixed English proper nouns.',
-    }
-  }
-  return {
-    outputLanguage: 'English',
-    languageRule: 'If script is English, keep output in English.',
-  }
 }
 
 export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] {
@@ -107,7 +90,7 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
         const model = createProviderModel(providerId, modelId, config)
         if (!model) return { ok: false, error: 'Provider not supported' }
         if (!isLanguageModel(model)) return { ok: false, error: 'Model type cannot be tested' }
-        await generateText({ model, prompt: 'hi', maxOutputTokens: 1 })
+        await generateText({ model, prompt: CONNECTION_TEST_PROMPT, maxOutputTokens: 1 })
         return { ok: true }
       } catch (err: unknown) {
         return { ok: false, error: shortError(err) }
@@ -187,18 +170,10 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
 
-      const conversation = params.messages
-        .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
-        .join('\n\n')
-      const prompt = [
-        'You are a style-library creation agent for an image/video prompt app.',
-        'Based on the conversation and current draft, suggest improved values.',
-        'In draft.prompt, NEVER include CLI-style flags or suffix params such as "--ar 16:9", "--stylize 300".',
-        'Return STRICT JSON only. No markdown.',
-        'JSON shape: {"reply":"","draft":{"name":"","code":"","description":"","prompt":""}}',
-        `Current draft:\n${JSON.stringify(params.draft)}`,
-        `Conversation:\n${conversation}`,
-      ].join('\n\n')
+      const prompt = buildStyleAgentPrompt({
+        messages: params.messages,
+        draft: params.draft,
+      })
 
       try {
         const { text } = await generateText({ model, prompt })
@@ -222,16 +197,16 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     extractCharactersFromScript: async (params: { script: string; modelKey?: string }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script)
-      const prompt = [
-        'Extract key screenplay characters as strict JSON.',
-        `Age must be one of: ${CHARACTER_AGE_CANONICAL_PROMPT.join(' / ')}`,
-        `Output language: ${outputLanguage}`,
-        languageRule,
-        'Return only:',
-        '{"characters":[{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}]}',
-        `Script:\n${params.script}`,
-      ].join('\n\n')
+      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'character')
+      const prompt = buildExtractionPrompt({
+        key: 'extractCharactersFromScript',
+        variables: {
+          characterAgeCanonical: CHARACTER_AGE_CANONICAL_PROMPT.join(' / '),
+          outputLanguage,
+          languageRule,
+          script: params.script,
+        },
+      })
 
       try {
         const { text } = await generateText({ model, prompt })
@@ -247,17 +222,17 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script)
-      const prompt = [
-        'Enhance one screenplay character as strict JSON.',
-        `Age must be one of: ${CHARACTER_AGE_CANONICAL_PROMPT.join(' / ')}`,
-        `Output language: ${outputLanguage}`,
-        languageRule,
-        'Return only:',
-        '{"character":{"name":"","gender":"","age":"","personality":"","appearance":"","background":""}}',
-        `Current character:\n${JSON.stringify(params.character)}`,
-        `Script:\n${params.script}`,
-      ].join('\n\n')
+      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'character')
+      const prompt = buildExtractionPrompt({
+        key: 'enhanceCharacterFromScript',
+        variables: {
+          characterAgeCanonical: CHARACTER_AGE_CANONICAL_PROMPT.join(' / '),
+          outputLanguage,
+          languageRule,
+          currentCharacter: JSON.stringify(params.character),
+          script: params.script,
+        },
+      })
 
       try {
         const { text } = await generateText({ model, prompt })
@@ -282,15 +257,15 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     extractScenesFromScript: async (params: { script: string; modelKey?: string }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script)
-      const prompt = [
-        'Extract key scenes from screenplay as strict JSON.',
-        `Output language: ${outputLanguage}`,
-        languageRule,
-        'Return only:',
-        '{"scenes":[{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}]}',
-        `Script:\n${params.script}`,
-      ].join('\n\n')
+      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'scene')
+      const prompt = buildExtractionPrompt({
+        key: 'extractScenesFromScript',
+        variables: {
+          outputLanguage,
+          languageRule,
+          script: params.script,
+        },
+      })
 
       try {
         const { text } = await generateText({ model, prompt })
@@ -302,15 +277,15 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     extractPropsFromScript: async (params: { script: string; modelKey?: string }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script)
-      const prompt = [
-        'Extract key physical props as strict JSON.',
-        `Output language: ${outputLanguage}`,
-        languageRule,
-        'Return only:',
-        '{"props":[{"name":"","category":"","description":""}]}',
-        `Script:\n${params.script}`,
-      ].join('\n\n')
+      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'prop')
+      const prompt = buildExtractionPrompt({
+        key: 'extractPropsFromScript',
+        variables: {
+          outputLanguage,
+          languageRule,
+          script: params.script,
+        },
+      })
 
       try {
         const { text } = await generateText({ model, prompt })
@@ -338,16 +313,14 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
         return { ok: true as const, relations: [] }
       }
 
-      const prompt = [
-        'Extract character relations as strict JSON.',
-        'Use only provided character IDs.',
-        'strength: integer 1-5',
-        'Return only:',
-        '{"relations":[{"source_ref":"","target_ref":"","relation_type":"","strength":3,"notes":"","evidence":""}]}',
-        `Characters:\n${JSON.stringify(params.characters)}`,
-        `Existing relations:\n${JSON.stringify(params.existingRelations ?? [])}`,
-        `Script:\n${params.script}`,
-      ].join('\n\n')
+      const prompt = buildExtractionPrompt({
+        key: 'extractCharacterRelationsFromScript',
+        variables: {
+          characters: JSON.stringify(params.characters),
+          existingRelations: JSON.stringify(params.existingRelations ?? []),
+          script: params.script,
+        },
+      })
 
       try {
         const { text } = await generateText({ model, prompt })
@@ -363,16 +336,16 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getOutputLanguageRules(params.script)
-      const prompt = [
-        'Enhance one screenplay scene as strict JSON.',
-        `Output language: ${outputLanguage}`,
-        languageRule,
-        'Return only:',
-        '{"scene":{"title":"","location":"","time":"","mood":"","description":"","shot_notes":""}}',
-        `Current scene:\n${JSON.stringify(params.scene)}`,
-        `Script:\n${params.script}`,
-      ].join('\n\n')
+      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'scene')
+      const prompt = buildExtractionPrompt({
+        key: 'enhanceSceneFromScript',
+        variables: {
+          outputLanguage,
+          languageRule,
+          currentScene: JSON.stringify(params.scene),
+          script: params.script,
+        },
+      })
 
       try {
         const { text } = await generateText({ model, prompt })
@@ -421,21 +394,30 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
 
-      const targetCount = Number.isFinite(params.target_count)
-        ? Math.max(1, Math.min(200, Math.round(params.target_count as number)))
-        : 30
-
-      const prompt = [
-        'Extract production-ready shot list as strict JSON.',
-        `Target count: ${targetCount}`,
-        'Return only:',
-        '{"shots":[{"title":"","scene_ref":"","character_refs":[],"prop_refs":[],"shot_size":"","camera_angle":"","camera_move":"","duration_sec":3,"action":"","dialogue":""}]}',
-        `Scenes:\n${JSON.stringify(params.scenes)}`,
-        `Characters:\n${JSON.stringify(params.characters)}`,
-        `Relations:\n${JSON.stringify(params.relations ?? [])}`,
-        `Props:\n${JSON.stringify(params.props)}`,
-        `Script:\n${params.script}`,
-      ].join('\n\n')
+      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'shot')
+      const rawTargetCount = typeof params.target_count === 'number' ? params.target_count : Number.NaN
+      const targetCount = Number.isFinite(rawTargetCount)
+        ? Math.max(1, Math.min(200, Math.round(rawTargetCount)))
+        : null
+      const targetCountSection = targetCount
+        ? [
+          `Target shot count: ${targetCount}.`,
+          `Try to output close to ${targetCount} shots (allow small deviation only if script structure truly requires it).`,
+        ].join('\n\n')
+        : ''
+      const prompt = buildExtractionPrompt({
+        key: 'extractShotsFromScript',
+        variables: {
+          targetCountSection,
+          outputLanguage,
+          languageRule,
+          scenes: JSON.stringify(params.scenes),
+          characters: JSON.stringify(params.characters),
+          relations: JSON.stringify(params.relations ?? []),
+          props: JSON.stringify(params.props),
+          script: params.script,
+        },
+      })
 
       try {
         const { text } = await generateText({ model, prompt })

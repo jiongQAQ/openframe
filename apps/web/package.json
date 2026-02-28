@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@openframe/prompts": "workspace:*",
     "@openframe/providers": "workspace:*",
     "@openframe/runtime-contract": "workspace:*",
     "@openframe/shared": "workspace:*",

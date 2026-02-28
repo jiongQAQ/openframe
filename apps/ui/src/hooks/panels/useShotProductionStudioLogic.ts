@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
+import {
+  AUTO_EDIT_PLANNER_INSTRUCTION,
+  buildAutoEditPlannerContext,
+  buildProductionFrameMotionSuffix,
+} from '@openframe/prompts'
 import type { Character } from '../../db/characters_collection'
 import type { CharacterRelation } from '../../db/character_relations_collection'
 import type { Prop } from '../../db/props_collection'
@@ -128,73 +133,6 @@ function formatShotContextLine(
     `Characters=${shotCharacters}`,
     `Props=${shotProps}`,
   ].join(' | ')
-}
-
-function includesAny(source: string, keywords: string[]): boolean {
-  return keywords.some((keyword) => source.includes(keyword))
-}
-
-function buildProductionFrameMotionSuffix(cameraMove: string, kind: 'first' | 'last'): string {
-  const move = (cameraMove || '').trim().toLowerCase()
-  const lines = [
-    'Hard requirements:',
-    kind === 'first'
-      ? '- Generate the temporal START frame: it must be an earlier moment than the middle frame within the same shot movement.'
-      : '- Generate the temporal END frame: it must be a later moment than the middle frame within the same shot movement.',
-    '- Keep shot intent consistent: same subject, same scene, same lens language, and same blocking logic.',
-    '- Strictly obey camera move direction; do not reverse motion.',
-    `- Camera move to follow: ${cameraMove || 'unknown'}`,
-  ]
-
-  if (!move || includesAny(move, ['static', 'locked', 'still', 'none', '固定', '静止', '不动'])) {
-    lines.push('- For static/locked camera, keep framing almost unchanged from the middle frame (only minimal natural variation).')
-    return lines.join('\n')
-  }
-
-  if (includesAny(move, ['push in', 'dolly in', 'truck in', 'zoom in', '推进', '推近', '拉近', '向前'])) {
-    lines.push(kind === 'first'
-      ? '- Push-in/zoom-in: first frame should be slightly wider/farther than middle frame.'
-      : '- Push-in/zoom-in: last frame should be slightly tighter/closer than middle frame.')
-    return lines.join('\n')
-  }
-
-  if (includesAny(move, ['pull out', 'dolly out', 'truck out', 'zoom out', '拉远', '拉出', '后退', '远离'])) {
-    lines.push(kind === 'first'
-      ? '- Pull-out/zoom-out: first frame should be slightly tighter/closer than middle frame.'
-      : '- Pull-out/zoom-out: last frame should be slightly wider/farther than middle frame.')
-    return lines.join('\n')
-  }
-
-  if (includesAny(move, ['pan left', 'left pan', '左摇', '向左摇', '左移'])) {
-    lines.push(kind === 'first'
-      ? '- Pan-left: first frame should be before the left pan completes.'
-      : '- Pan-left: last frame should be after the camera has moved further left.')
-    return lines.join('\n')
-  }
-
-  if (includesAny(move, ['pan right', 'right pan', '右摇', '向右摇', '右移'])) {
-    lines.push(kind === 'first'
-      ? '- Pan-right: first frame should be before the right pan completes.'
-      : '- Pan-right: last frame should be after the camera has moved further right.')
-    return lines.join('\n')
-  }
-
-  if (includesAny(move, ['tilt up', 'up tilt', '仰拍', '上摇', '向上'])) {
-    lines.push(kind === 'first'
-      ? '- Tilt-up: first frame should be lower in pitch than middle frame.'
-      : '- Tilt-up: last frame should be higher in pitch than middle frame.')
-    return lines.join('\n')
-  }
-
-  if (includesAny(move, ['tilt down', 'down tilt', '俯拍', '下摇', '向下'])) {
-    lines.push(kind === 'first'
-      ? '- Tilt-down: first frame should be higher in pitch than middle frame.'
-      : '- Tilt-down: last frame should be lower in pitch than middle frame.')
-    return lines.join('\n')
-  }
-
-  lines.push('- Show a clear temporal before/after phase relative to middle frame while preserving shot continuity.')
-  return lines.join('\n')
 }
 
 export function useShotProductionStudioLogic(params: Params) {
@@ -1167,19 +1105,16 @@ export function useShotProductionStudioLogic(params: Params) {
           const clipLines = clips
             .map((clip, index) => `${index + 1}. ${clip.shotId} | ${clip.title || 'untitled'} | duration=${clip.durationSec}s | action=${clip.action || '-'} | dialogue=${clip.dialogue || '-'}`)
             .join('\n')
-          const aiContext = [
-            'You are an editing planner. Return JSON only.',
-            `User intent: ${prompt || 'Generate the most coherent story cut.'}`,
-            `Ratio: ${projectRatio}`,
-            'Available clips:',
+          const aiContext = buildAutoEditPlannerContext({
+            userPrompt: prompt,
+            projectRatio,
             clipLines,
-          ].join('\n')
-          const instruction = 'Return ONLY one JSON object: {"orderedShotIds": string[]}. Keep IDs from the provided list only. Keep between 1 and 20 clips.'
+          })
 
           const result = await window.aiAPI.scriptToolkit({
             action: 'scene.rewrite',
             context: aiContext,
-            instruction,
+            instruction: AUTO_EDIT_PLANNER_INSTRUCTION,
             modelKey: selectedTextModelKey,
           })
 
