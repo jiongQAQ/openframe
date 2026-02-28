@@ -1,10 +1,10 @@
 <p align='center'>
-  <img src='./apps/desktop/public/logo.svg' alt='Openframe logo' width='120' />
+  <img src='./apps/ui/public/logo.svg' alt='Openframe logo' width='120' />
 </p>
 
 # Openframe
 
-Openframe is an AI-powered desktop studio for turning scripts into characters, scenes, storyboards, shots, and production-ready videos.
+Openframe is an AI-powered script-to-production studio with both desktop and web runtimes.
 
 [中文文档](./README.zh.md)
 
@@ -18,78 +18,68 @@ Openframe is an AI-powered desktop studio for turning scripts into characters, s
   - scene expand / rewrite / dialogue polish / pacing / continuity check
 - Character relation graph with script-driven extraction and optimization
 - Language-aware extraction for core entities (character / prop / scene / shot)
-- Scene image generation constrained to environment-only output (no people)
-- Shot generation supports target shot count input (higher count -> richer, smoother output)
+- Shot generation supports target shot count input (higher count -> richer output)
 - Thumbnail full-image preview in character / prop / scene / shot panels
 - First-launch Driver.js style onboarding tour
 
-## Core Features
+## App Targets
 
-1. Project & Episode Management
-- Create and organize projects and episodes
-- Open dedicated studio window for episode production
+- `apps/desktop`: Electron shell (native desktop app)
+- `apps/ui`: Shared React UI and business logic
+- `apps/web`: Web shell + API proxy route for browser deployment
 
-2. Script Workspace
-- Rich editor powered by TipTap
-- AI tools available directly in editor toolbar
-- Real-time content save and generation workflow integration
+## Runtime Differences
 
-3. Character / Prop / Scene Libraries
-- Script-based extraction and regeneration
-- AI-assisted enhancement for cards
-- Turnaround-style image generation
-- Full-image preview by clicking thumbnails
+### Desktop
 
-4. Character Relations
-- Build relation topology from project scripts
-- Optimize relation graph based on current script context
+- Persistence: SQLite (`better-sqlite3`) + `electron-store`
+- Native features: local directory selection, media cleanup, native exports
+- Vector search: available in desktop runtime (`sqlite-vec`)
 
-5. Shot Design & Production
-- Generate shots from script with scene/character/prop references
-- Control target shot count before generation
-- Shot image generation and production frames/video workflow
-- Export merged video, FCPXML timeline, and EDL
+### Web
 
-6. Data & Settings
-- Configurable AI providers/models (including custom providers)
-- Storage usage panel and cleanup for unused media
-- Language/theme and local data directory settings
+- Persistence: IndexedDB (SQLite replacement in browser)
+- Settings storage: `localStorage` (settings JSON replacement in browser)
+- Backend: `/api/ai` proxy only (forwarding requests)
+- Data panel hides desktop-only operations (directory open/change, media cleanup, local media size sections)
 
 ## Tech Stack
 
 - Monorepo: `pnpm workspace`
 - Desktop app: `Electron + React + Vite + TypeScript`
+- Web app: `Vite + React + Vercel Functions`
 - UI: `Tailwind CSS + daisyUI + lucide-react`
 - Editor: `TipTap`
-- Data layer: `SQLite + better-sqlite3 + Drizzle schema`
+- Desktop data layer: `SQLite + better-sqlite3 + Drizzle schema`
+- Web data layer: `IndexedDB + localStorage`
 - Reactive local state: `TanStack DB`
 - AI integration: `Vercel AI SDK + custom REST providers`
-- Vector search: `sqlite-vec`
 
 ## Repository Layout
 
 ```text
 openframe/
   apps/
-    desktop/                 # main Electron app
-      electron/              # main process, IPC handlers
-      src/                   # renderer process (React)
+    desktop/                 # Electron app (main/preload/desktop shell)
+    ui/                      # Shared UI + routes + collections
+    web/                     # Web shell + api/ai proxy route
   packages/
-    db/                      # shared DB schema
+    db/                      # Shared DB schema
     providers/               # AI provider/model definitions
+    runtime-contract/        # Shared Window/runtime type contract
+    shared/                  # Shared constants/utils
 ```
 
 ## Prerequisites
 
 - Node.js (LTS recommended)
 - `pnpm@9.12.2`
-- Desktop OS: macOS / Windows / Linux
+- Desktop OS for Electron builds: macOS / Windows / Linux
 
-## Install & Run
+## Install
 
 ```bash
 pnpm install
-pnpm dev
 ```
 
 `apps/desktop` runs `electron-rebuild` for `better-sqlite3` during `postinstall`.
@@ -98,36 +88,49 @@ pnpm dev
 
 ```bash
 # root
-pnpm dev
+pnpm dev            # desktop dev
+pnpm dev:web        # web dev (http://localhost:5170)
 pnpm build
+pnpm build:web
 pnpm lint
 pnpm test
 pnpm db:generate
 pnpm db:migrate
 
-# app type check
+# type check
+pnpm -C apps/ui exec tsc --noEmit
+pnpm -C apps/web exec tsc --noEmit
 pnpm -C apps/desktop exec tsc --noEmit
-
-# single file lint
-pnpm -C apps/desktop exec eslint src/components/ScriptEditor.tsx
 ```
+
+## Web Deployment (Vercel)
+
+This repository includes `vercel.json` for monorepo deployment.
+
+- Build output: `apps/web/dist`
+- API function source: `apps/web/api/**/*.ts`
+- Public API path: `/api/ai` (rewritten to `/apps/web/api/ai`)
+
+Important setting in Vercel project:
+
+- `Root Directory` should be repository root (`.`), not `apps/web`.
 
 ## Architecture Rules
 
-- Renderer must not access DB/filesystem directly.
-- Persistence and local file operations must go through `window.*API` from `electron/preload.ts`.
-- For any new entity, update this chain together:
+- Renderer/UI must not access DB/filesystem directly.
+- Persistence and side effects go through `window.*API` runtime contracts.
+- For new entities in desktop+ui flow, update this chain together:
   1. `packages/db/schema.ts`
   2. `apps/desktop/electron/handlers/*.ts`
   3. `apps/desktop/electron/preload.ts`
-  4. `apps/desktop/electron/electron-env.d.ts`
-  5. `apps/desktop/src/db/*_collection.ts`
+  4. `packages/runtime-contract/index.d.ts`
+  5. `apps/ui/src/db/*_collection.ts`
 - Handler SQL uses raw `better-sqlite3`.
-- Do not manually edit `apps/desktop/src/routeTree.gen.ts`.
+- Do not manually edit generated route tree files.
 
 ## Database & Migrations
 
-- Runtime DB path: `app.getPath('userData')/app.db`
+- Desktop runtime DB path: `app.getPath('userData')/app.db`
 - Migration folder: `apps/desktop/electron/migrations/`
 
 After schema changes:
@@ -140,18 +143,18 @@ pnpm -C apps/desktop db:generate
 
 Keep locale files aligned:
 
-- `apps/desktop/src/i18n/locales/en.ts`
-- `apps/desktop/src/i18n/locales/zh.ts`
+- `apps/ui/src/i18n/locales/en.ts`
+- `apps/ui/src/i18n/locales/zh.ts`
 
 ## Troubleshooting
 
 - `No default text model configured`: configure and enable a text model in Settings.
 - Native dependency build issues: rerun `pnpm install` and verify `electron-rebuild` success.
-- AI or media export issues: verify provider config, model availability, and local media toolchain.
-- macOS shows `"<App>" is damaged and can't be opened`:
-  - for local unsigned builds only, remove quarantine manually:
-    - `xattr -dr com.apple.quarantine /Applications/Openframe.app`
-  - for public distribution, ship a signed + notarized app (see release secrets below).
+- Vercel cannot detect correct root/build context:
+  - ensure project `Root Directory` is `.`
+  - redeploy after pulling latest `vercel.json`
+- AI proxy issues in web:
+  - verify `/api/ai` is deployed and reachable
 
 ## Release
 
