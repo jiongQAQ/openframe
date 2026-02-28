@@ -47,7 +47,7 @@ export function useStudioWorkspaceLogic({
   seriesTitle,
   scriptContent,
 }: StudioWorkspaceProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [activeStep, setActiveStep] = useState<WorkflowStepKey>('script')
   const [taskQueue, setTaskQueue] = useState<StudioTaskItem[]>([])
   const [queueOpen, setQueueOpen] = useState(true)
@@ -65,8 +65,8 @@ export function useStudioWorkspaceLogic({
     [settingsList],
   )
   const promptOverrides = useMemo(
-    () => parsePromptOverridesFromSetting(settingsMap[PROMPT_OVERRIDES_SETTING_KEY]),
-    [settingsMap],
+    () => parsePromptOverridesFromSetting(settingsMap[PROMPT_OVERRIDES_SETTING_KEY], i18n.language),
+    [settingsMap, i18n.language],
   )
 
   function updateTask(id: string, patch: Partial<StudioTaskItem>) {

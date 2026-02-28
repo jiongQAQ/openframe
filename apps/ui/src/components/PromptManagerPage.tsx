@@ -6,6 +6,7 @@ import { PromptSettingsPanel } from './settings/PromptSettingsPanel'
 import {
   PROMPT_OVERRIDES_SETTING_KEY,
   parsePromptOverridesFromSetting,
+  stringifyPromptOverridesForSetting,
   type PromptOverrides,
 } from '../utils/prompt_overrides'
 
@@ -24,7 +25,7 @@ function upsertSetting(
 }
 
 export function PromptManagerPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data: settingsList } = useLiveQuery(settingsCollection)
   const settingsMap = useMemo(
     () => Object.fromEntries((settingsList ?? []).map((item) => [item.id, item.value])),
@@ -32,8 +33,8 @@ export function PromptManagerPage() {
   )
   const rawPromptOverrides = settingsMap[PROMPT_OVERRIDES_SETTING_KEY] ?? ''
   const storedOverrides = useMemo(
-    () => parsePromptOverridesFromSetting(rawPromptOverrides),
-    [rawPromptOverrides],
+    () => parsePromptOverridesFromSetting(rawPromptOverrides, i18n.language),
+    [rawPromptOverrides, i18n.language],
   )
   const [draftOverrides, setDraftOverrides] = useState<PromptOverrides>(storedOverrides)
   const [savedHintVisible, setSavedHintVisible] = useState(false)
@@ -49,7 +50,11 @@ export function PromptManagerPage() {
 
   function handleSave() {
     if (!isDirty) return
-    upsertSetting(settingsList, PROMPT_OVERRIDES_SETTING_KEY, JSON.stringify(draftOverrides))
+    upsertSetting(settingsList, PROMPT_OVERRIDES_SETTING_KEY, stringifyPromptOverridesForSetting({
+      raw: rawPromptOverrides,
+      language: i18n.language,
+      overrides: draftOverrides,
+    }))
     setSavedHintVisible(true)
     window.setTimeout(() => setSavedHintVisible(false), 1500)
   }

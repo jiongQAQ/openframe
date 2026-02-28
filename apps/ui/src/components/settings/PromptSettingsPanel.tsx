@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  DEFAULT_PROMPT_OVERRIDES,
+  getDefaultPromptOverrides,
   PROMPT_OVERRIDE_FIELDS,
   type PromptModality,
   type PromptOverrideKey,
@@ -37,8 +37,6 @@ const PLACEHOLDER_DESC_KEY: Record<string, string> = {
   direction: 'settings.promptVarDirection',
   modeHint: 'settings.promptVarModeHint',
   characterAgeCanonical: 'settings.promptVarCharacterAgeCanonical',
-  outputLanguage: 'settings.promptVarOutputLanguage',
-  languageRule: 'settings.promptVarLanguageRule',
   script: 'settings.promptVarScript',
   currentCharacter: 'settings.promptVarCurrentCharacter',
   currentScene: 'settings.promptVarCurrentScene',
@@ -54,7 +52,7 @@ interface PromptSettingsPanelProps {
 }
 
 export function PromptSettingsPanel({ overrides, onChange }: PromptSettingsPanelProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState<PromptModality>('image')
   const [guideFieldKey, setGuideFieldKey] = useState<PromptOverrideKey | null>(null)
 
@@ -83,7 +81,7 @@ export function PromptSettingsPanel({ overrides, onChange }: PromptSettingsPanel
   function resetAll() {
     const shouldReset = window.confirm(t('settings.promptResetConfirm'))
     if (!shouldReset) return
-    onChange({ ...DEFAULT_PROMPT_OVERRIDES })
+    onChange(getDefaultPromptOverrides(i18n.language))
   }
 
   return (

@@ -29,7 +29,7 @@ type ProjectDetailTab = 'episodes' | 'characters' | 'relations' | 'props' | 'sce
 type Scene = Awaited<ReturnType<Window['scenesAPI']['getByProject']>>[number]
 
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { location } = useRouterState()
   const { data: projects } = useLiveQuery(projectsCollection)
@@ -79,8 +79,8 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     [settingsList],
   )
   const promptOverrides = useMemo(
-    () => parsePromptOverridesFromSetting(settingsMap[PROMPT_OVERRIDES_SETTING_KEY]),
-    [settingsMap],
+    () => parsePromptOverridesFromSetting(settingsMap[PROMPT_OVERRIDES_SETTING_KEY], i18n.language),
+    [settingsMap, i18n.language],
   )
   const selectedSeriesId = useMemo(() => {
     const params = new URLSearchParams(location.search)

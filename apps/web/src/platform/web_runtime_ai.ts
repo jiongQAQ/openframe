@@ -4,7 +4,6 @@ import {
   buildExtractionPrompt,
   buildStyleAgentPrompt,
   CONNECTION_TEST_PROMPT,
-  getExtractionOutputLanguageRules,
 } from '@openframe/prompts'
 import {
   createProviderModel,
@@ -197,13 +196,11 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     extractCharactersFromScript: async (params: { script: string; modelKey?: string }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'character')
       const prompt = buildExtractionPrompt({
         key: 'extractCharactersFromScript',
+        script: params.script,
         variables: {
           characterAgeCanonical: CHARACTER_AGE_CANONICAL_PROMPT.join(' / '),
-          outputLanguage,
-          languageRule,
           script: params.script,
         },
       })
@@ -222,13 +219,11 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'character')
       const prompt = buildExtractionPrompt({
         key: 'enhanceCharacterFromScript',
+        script: params.script,
         variables: {
           characterAgeCanonical: CHARACTER_AGE_CANONICAL_PROMPT.join(' / '),
-          outputLanguage,
-          languageRule,
           currentCharacter: JSON.stringify(params.character),
           script: params.script,
         },
@@ -257,12 +252,10 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     extractScenesFromScript: async (params: { script: string; modelKey?: string }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'scene')
       const prompt = buildExtractionPrompt({
         key: 'extractScenesFromScript',
+        script: params.script,
         variables: {
-          outputLanguage,
-          languageRule,
           script: params.script,
         },
       })
@@ -277,12 +270,10 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     extractPropsFromScript: async (params: { script: string; modelKey?: string }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'prop')
       const prompt = buildExtractionPrompt({
         key: 'extractPropsFromScript',
+        script: params.script,
         variables: {
-          outputLanguage,
-          languageRule,
           script: params.script,
         },
       })
@@ -315,6 +306,7 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
 
       const prompt = buildExtractionPrompt({
         key: 'extractCharacterRelationsFromScript',
+        script: params.script,
         variables: {
           characters: JSON.stringify(params.characters),
           existingRelations: JSON.stringify(params.existingRelations ?? []),
@@ -336,12 +328,10 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
     }) => {
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
-      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'scene')
       const prompt = buildExtractionPrompt({
         key: 'enhanceSceneFromScript',
+        script: params.script,
         variables: {
-          outputLanguage,
-          languageRule,
           currentScene: JSON.stringify(params.scene),
           script: params.script,
         },
@@ -394,7 +384,6 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
       const model = resolveTextModel(options.getCurrentAIConfig(), params.modelKey)
       if (!model) return { ok: false as const, error: 'No default text model configured.' }
 
-      const { outputLanguage, languageRule } = getExtractionOutputLanguageRules(params.script, 'shot')
       const rawTargetCount = typeof params.target_count === 'number' ? params.target_count : Number.NaN
       const targetCount = Number.isFinite(rawTargetCount)
         ? Math.max(1, Math.min(200, Math.round(rawTargetCount)))
@@ -407,10 +396,9 @@ export function createWebAiApi(options: CreateWebAiApiOptions): Window['aiAPI'] 
         : ''
       const prompt = buildExtractionPrompt({
         key: 'extractShotsFromScript',
+        script: params.script,
         variables: {
           targetCountSection,
-          outputLanguage,
-          languageRule,
           scenes: JSON.stringify(params.scenes),
           characters: JSON.stringify(params.characters),
           relations: JSON.stringify(params.relations ?? []),
