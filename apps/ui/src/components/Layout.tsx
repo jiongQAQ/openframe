@@ -28,6 +28,7 @@ const menuItems: MenuItem[] = [
 const GITHUB_REPO_URL = 'https://github.com/murongg/openframe'
 const GITHUB_RELEASES_API_URL = 'https://api.github.com/repos/murongg/openframe/releases/latest'
 const ONBOARDING_VERSION = '5'
+const WEB_UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000
 
 type UpdateNotice = {
   currentVersion: string
@@ -128,48 +129,63 @@ export default function Layout({ children }: LayoutProps) {
   useEffect(() => {
     if (isStudioWindow) return
     let active = true
+    let inFlight = false
 
-    void (async () => {
-      const [currentVersionRaw, rows] = await Promise.all([
-        window.windowAPI.getVersion(),
-        window.settingsAPI.getAll(),
-      ])
-      if (!active) return
+    async function checkUpdateNotice() {
+      if (!active || inFlight) return
+      inFlight = true
+      try {
+        const [currentVersionRaw, rows] = await Promise.all([
+          window.windowAPI.getVersion(),
+          window.settingsAPI.getAll(),
+        ])
+        if (!active) return
 
-      const currentVersion = normalizeVersion(currentVersionRaw)
-      if (!parseVersionParts(currentVersion)) return
-      const dismissedVersion = normalizeVersion(
-        rows.find((row) => row.key === 'update_dismissed_version')?.value || '',
-      )
+        const currentVersion = normalizeVersion(currentVersionRaw)
+        if (!parseVersionParts(currentVersion)) return
+        const dismissedVersion = normalizeVersion(
+          rows.find((row) => row.key === 'update_dismissed_version')?.value || '',
+        )
 
-      const response = await fetch(GITHUB_RELEASES_API_URL, {
-        headers: {
-          accept: 'application/vnd.github+json',
-        },
-      })
-      if (!response.ok) return
+        const response = await fetch(GITHUB_RELEASES_API_URL, {
+          headers: {
+            accept: 'application/vnd.github+json',
+          },
+        })
+        if (!response.ok) return
 
-      const latest = await response.json() as {
-        tag_name?: string
-        html_url?: string
+        const latest = await response.json() as {
+          tag_name?: string
+          html_url?: string
+        }
+        const latestVersion = normalizeVersion(latest.tag_name ?? '')
+        if (!latestVersion) return
+        if (!isVersionNewer(latestVersion, currentVersion)) return
+        if (dismissedVersion && dismissedVersion === latestVersion) return
+        if (!active) return
+
+        setUpdateNotice({
+          currentVersion,
+          latestVersion,
+          releaseUrl: latest.html_url || `${GITHUB_REPO_URL}/releases/latest`,
+        })
+      } finally {
+        inFlight = false
       }
-      const latestVersion = normalizeVersion(latest.tag_name ?? '')
-      if (!latestVersion) return
-      if (!isVersionNewer(latestVersion, currentVersion)) return
-      if (dismissedVersion && dismissedVersion === latestVersion) return
-      if (!active) return
+    }
 
-      setUpdateNotice({
-        currentVersion,
-        latestVersion,
-        releaseUrl: latest.html_url || `${GITHUB_REPO_URL}/releases/latest`,
-      })
-    })().catch(() => undefined)
+    void checkUpdateNotice().catch(() => undefined)
+    const pollTimer = !isDesktopRuntime
+      ? window.setInterval(() => {
+        void checkUpdateNotice().catch(() => undefined)
+      }, WEB_UPDATE_POLL_INTERVAL_MS)
+      : null
 
     return () => {
       active = false
+      if (pollTimer != null) window.clearInterval(pollTimer)
     }
-  }, [isStudioWindow])
+  }, [isDesktopRuntime, isStudioWindow])
 
   useEffect(() => {
     if (!onboardingPending || isStudioWindow) return
