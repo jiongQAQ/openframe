@@ -95,10 +95,14 @@ export default function Layout({ children }: LayoutProps) {
 
   const handleOpenUpdate = useCallback(() => {
     if (!updateNotice) return
+    if (!isDesktopRuntime) {
+      window.location.reload()
+      return
+    }
     void window.settingsAPI.upsert('update_dismissed_version', updateNotice.latestVersion)
     void window.windowAPI.openExternal(updateNotice.releaseUrl)
     setUpdateNotice(null)
-  }, [updateNotice])
+  }, [isDesktopRuntime, updateNotice])
 
   const markOnboardingSeen = useCallback(() => {
     setOnboardingPending(false)
