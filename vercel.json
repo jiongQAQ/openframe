@@ -4,14 +4,8 @@
   "buildCommand": "test -f scripts/vercel-build.mjs && node scripts/vercel-build.mjs || node ../../scripts/vercel-build.mjs",
   "devCommand": "pnpm --filter openframe-web dev",
   "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/apps/web/api/:path*"
-    }
-  ],
   "functions": {
-    "apps/web/api/**/*.ts": {
+    "api/**/*.ts": {
       "runtime": "nodejs20.x"
     }
   }
