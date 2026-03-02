@@ -5,13 +5,24 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import fs from 'node:fs'
 import aiProxyHandler from './api/ai'
+import storageHandler from './api/storage'
 
 type DevProxyResponse = {
   setHeader: (name: string, value: string) => void
   status: (code: number) => { json: (payload: unknown) => void }
 }
 
+type DevApiHandler = (
+  req: { method?: string; body?: unknown },
+  res: DevProxyResponse,
+) => Promise<void> | void
+
 function createWebApiPlugin(): Plugin {
+  const handlers: Record<string, DevApiHandler> = {
+    '/api/ai': aiProxyHandler as DevApiHandler,
+    '/api/storage': storageHandler as DevApiHandler,
+  }
+
   return {
     name: 'openframe-web-api',
     apply: 'serve',
@@ -23,7 +34,8 @@ function createWebApiPlugin(): Plugin {
         }
 
         const pathname = req.url.split('?')[0]
-        if (pathname !== '/api/ai') {
+        const handler = handlers[pathname]
+        if (!handler) {
           next()
           return
         }
@@ -57,7 +69,7 @@ function createWebApiPlugin(): Plugin {
             }),
           }
 
-          await aiProxyHandler(
+          await handler(
             {
               method: req.method,
               body,

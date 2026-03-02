@@ -140,6 +140,17 @@ type ShotRow = {
   production_video_prompt_override: string | null
   created_at: number
 }
+type ObjectStorageConfig = {
+  provider: 'local' | 's3' | 'oss' | 'cos'
+  endpoint: string
+  region: string
+  bucket: string
+  accessKeyId: string
+  secretAccessKey: string
+  pathPrefix: string
+  publicBaseUrl: string
+  forcePathStyle: boolean
+}
 
 // --------- Expose Thumbnails API to the Renderer process ---------
 contextBridge.exposeInMainWorld('thumbnailsAPI', {
@@ -323,6 +334,8 @@ contextBridge.exposeInMainWorld('dataAPI', {
     ipcRenderer.invoke('data:getInfo'),
   cleanupUnusedMedia: (): Promise<{ removedImages: number; removedVideos: number; freedBytes: number }> =>
     ipcRenderer.invoke('data:cleanupUnusedMedia'),
+  testObjectStorage: (config: ObjectStorageConfig): Promise<{ ok: boolean; error?: string; url?: string }> =>
+    ipcRenderer.invoke('data:testObjectStorage', config),
   selectDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke('data:selectDirectory'),
   setDirectory: (dir: string): Promise<void> =>

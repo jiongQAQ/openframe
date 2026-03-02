@@ -2,6 +2,11 @@ import { ipcMain, dialog, app, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createObjectStorageFactory } from '@openframe/shared/object-storage-factory'
+import {
+  normalizeObjectStorageConfig,
+  type ObjectStorageConfig,
+} from '@openframe/shared/object-storage-config'
 import { store } from '../store'
 import { getDataDir } from '../data_dir'
 import { getRawDb } from '../db'
@@ -140,6 +145,13 @@ function mediaTypeByPath(filePath: string): 'image' | 'video' | null {
   return null
 }
 
+function shortError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.split('\n')[0].slice(0, 200)
+}
+
+const STORAGE_TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5x8AAAAASUVORK5CYII='
+
 export function registerDataHandlers() {
   ipcMain.handle('data:getInfo', () => {
     const defaultDir = app.getPath('userData')
@@ -217,6 +229,32 @@ export function registerDataHandlers() {
   ipcMain.handle('data:openDirectory', () => {
     shell.openPath(getDataDir())
   })
+
+  ipcMain.handle(
+    'data:testObjectStorage',
+    async (
+      _event,
+      config: ObjectStorageConfig,
+    ): Promise<{ ok: boolean; error?: string; url?: string }> => {
+      const normalized = normalizeObjectStorageConfig(config)
+      const storage = createObjectStorageFactory(normalized)
+      if (!storage.enabled) {
+        return { ok: false, error: 'Object storage is not configured' }
+      }
+
+      try {
+        const url = await storage.saveMedia({
+          data: new Uint8Array(Buffer.from(STORAGE_TEST_IMAGE_BASE64, 'base64')),
+          ext: 'png',
+          folder: 'thumbnails',
+        })
+        if (!url) return { ok: false, error: 'Object storage is not configured' }
+        return { ok: true, url }
+      } catch (err: unknown) {
+        return { ok: false, error: shortError(err) }
+      }
+    },
+  )
 
   ipcMain.handle('data:restart', () => {
     app.relaunch()

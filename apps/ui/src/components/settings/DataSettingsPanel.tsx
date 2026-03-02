@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, FolderInput, RotateCcw, RefreshCw } from 'lucide-react'
+import { FolderOpen, FolderInput, RotateCcw, RefreshCw, CheckCircle, Loader, XCircle } from 'lucide-react'
 import type { ObjectStorageConfig, ObjectStorageProvider } from '../../utils/storage_config'
 
 function formatBytes(bytes: number): string {
@@ -14,6 +14,13 @@ function formatBytes(bytes: number): string {
 interface DataSettingsPanelProps {
   storageConfig: ObjectStorageConfig
   onStorageConfigChange: (next: ObjectStorageConfig) => void
+}
+
+type TestState = 'idle' | 'testing' | 'ok' | 'error'
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  return typeof err === 'string' ? err : 'Unknown error'
 }
 
 export function DataSettingsPanel({ storageConfig, onStorageConfigChange }: DataSettingsPanelProps) {
@@ -38,6 +45,8 @@ export function DataSettingsPanel({ storageConfig, onStorageConfigChange }: Data
     removedVideos: number
     freedBytes: number
   } | null>(null)
+  const [objectStorageTestState, setObjectStorageTestState] = useState<TestState>('idle')
+  const [objectStorageTestError, setObjectStorageTestError] = useState('')
 
   function load() {
     setLoading(true)
@@ -77,12 +86,48 @@ export function DataSettingsPanel({ storageConfig, onStorageConfigChange }: Data
 
   const hasPending = info && info.pendingDir !== '' && info.pendingDir !== info.currentDir
   const usingObjectStorage = storageConfig.provider !== 'local'
+  const canTestObjectStorage = usingObjectStorage
+    && Boolean(storageConfig.endpoint.trim())
+    && Boolean(storageConfig.bucket.trim())
+    && Boolean(storageConfig.accessKeyId.trim())
+    && Boolean(storageConfig.secretAccessKey.trim())
 
   function updateStorageConfig<Key extends keyof ObjectStorageConfig>(key: Key, value: ObjectStorageConfig[Key]) {
+    setObjectStorageTestState('idle')
+    setObjectStorageTestError('')
     onStorageConfigChange({
       ...storageConfig,
       [key]: value,
     })
+  }
+
+  async function handleTestObjectStorage() {
+    setObjectStorageTestState('testing')
+    setObjectStorageTestError('')
+    try {
+      const testObjectStorage = (
+        window.dataAPI as Window['dataAPI'] & {
+          testObjectStorage?: (config: ObjectStorageConfig) => Promise<{ ok: boolean; error?: string; url?: string }>
+        }
+      ).testObjectStorage
+
+      if (!testObjectStorage) {
+        setObjectStorageTestState('error')
+        setObjectStorageTestError(t('settings.objectStorageTestUnavailable'))
+        return
+      }
+
+      const result = await testObjectStorage(storageConfig)
+      if (result.ok) {
+        setObjectStorageTestState('ok')
+        return
+      }
+      setObjectStorageTestState('error')
+      setObjectStorageTestError(result.error ?? '')
+    } catch (err: unknown) {
+      setObjectStorageTestState('error')
+      setObjectStorageTestError(toErrorMessage(err))
+    }
   }
 
   return (
@@ -200,6 +245,39 @@ export function DataSettingsPanel({ storageConfig, onStorageConfigChange }: Data
                     <span className="label-text">{t('settings.objectStorageForcePathStyle')}</span>
                   </label>
                 ) : null}
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-base-content/60 uppercase tracking-wide">
+                    {t('settings.objectStorageTestConnection')}
+                  </label>
+                  <div className="flex gap-1.5">
+                    <button
+                      className="btn btn-outline shrink-0"
+                      disabled={objectStorageTestState === 'testing' || !canTestObjectStorage}
+                      onClick={() => void handleTestObjectStorage()}
+                    >
+                      {objectStorageTestState === 'testing' ? (
+                        <Loader size={14} className="animate-spin" />
+                      ) : objectStorageTestState === 'ok' ? (
+                        <CheckCircle size={14} className="text-success" />
+                      ) : objectStorageTestState === 'error' ? (
+                        <XCircle size={14} className="text-error" />
+                      ) : null}
+                      {t('settings.objectStorageTestConnection')}
+                    </button>
+                  </div>
+                  {!canTestObjectStorage && (
+                    <p className="text-xs text-base-content/60">
+                      {t('settings.objectStorageTestMissingConfig')}
+                    </p>
+                  )}
+                  {objectStorageTestState === 'error' && objectStorageTestError && (
+                    <p className="text-xs text-error">{objectStorageTestError}</p>
+                  )}
+                  {objectStorageTestState === 'ok' && (
+                    <p className="text-xs text-success">{t('settings.objectStorageTestSuccess')}</p>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-xs text-base-content/60 rounded-lg border border-base-300 bg-base-200 px-3 py-2">

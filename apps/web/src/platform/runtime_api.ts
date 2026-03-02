@@ -1,6 +1,7 @@
 import {
   isObjectStorageEnabled,
   parseObjectStorageConfig,
+  type ObjectStorageConfig,
 } from '@openframe/shared/object-storage-config'
 import { ensureProxyFetchInstalled } from './fetch_proxy'
 import { createWebAiApi } from './runtime_ai'
@@ -80,6 +81,17 @@ function estimateTextBytes(value: string): number {
 function maybeDataUrlSize(value: string | null | undefined): number {
   if (!value || !/^data:/i.test(value)) return 0
   return estimateTextBytes(value)
+}
+
+const STORAGE_TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5x8AAAAASUVORK5CYII='
+
+function decodeBase64ToBytes(value: string): Uint8Array {
+  const binary = atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
 }
 
 async function getDataInfo(): Promise<DataInfo> {
@@ -361,6 +373,23 @@ export function ensureWebRuntimeAPIs(): void {
       removedVideos: 0,
       freedBytes: 0,
     }),
+    testObjectStorage: async (config: ObjectStorageConfig) => {
+      try {
+        if (!isObjectStorageEnabled(config)) {
+          return { ok: false, error: 'Object storage is not configured' }
+        }
+        const url = await uploadMediaToObjectStorage({
+          data: decodeBase64ToBytes(STORAGE_TEST_IMAGE_BASE64),
+          ext: 'png',
+          folder: 'thumbnails',
+          config,
+        })
+        return { ok: true, url }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: message || 'Upload failed' }
+      }
+    },
     selectDirectory: async () => null,
     setDirectory: async (dir: string) => {
       localSet(DATA_DIR_KEY, dir || DEFAULT_DATA_DIR)

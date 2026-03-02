@@ -113,6 +113,17 @@ type DataInfo = {
   thumbsSize: number
   videosSize: number
 }
+type ObjectStorageConfig = {
+  provider: 'local' | 's3' | 'oss' | 'cos'
+  endpoint: string
+  region: string
+  bucket: string
+  accessKeyId: string
+  secretAccessKey: string
+  pathPrefix: string
+  publicBaseUrl: string
+  forcePathStyle: boolean
+}
 
 type IpcRendererLike = {
   on: (...args: unknown[]) => IpcRendererLike
@@ -377,6 +388,7 @@ interface Window {
   dataAPI: {
     getInfo: () => Promise<DataInfo>
     cleanupUnusedMedia: () => Promise<{ removedImages: number; removedVideos: number; freedBytes: number }>
+    testObjectStorage: (config: ObjectStorageConfig) => Promise<{ ok: boolean; error?: string; url?: string }>
     selectDirectory: () => Promise<string | null>
     setDirectory: (dir: string) => Promise<void>
     resetDirectory: () => Promise<void>
