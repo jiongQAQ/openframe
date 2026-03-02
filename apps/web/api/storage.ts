@@ -43,6 +43,19 @@ function decodeBase64(value: string): Uint8Array {
   return bytes
 }
 
+function toErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  return String(err)
+}
+
+function resolveHttpStatus(err: unknown): number {
+  const metadataStatus = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode
+  if (typeof metadataStatus === 'number' && metadataStatus >= 400 && metadataStatus < 500) {
+    return 400
+  }
+  return 500
+}
+
 export default async function handler(
   req: { method?: string; body?: unknown },
   res: {
@@ -98,7 +111,19 @@ export default async function handler(
 
     json(res, 200, { ok: true, url })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    json(res, 500, { ok: false, error: message || 'Upload failed' })
+    const message = toErrorMessage(err) || 'Upload failed'
+    const status = resolveHttpStatus(err)
+    const safeConfig = {
+      provider: body.config?.provider,
+      endpoint: body.config?.endpoint,
+      region: body.config?.region,
+      bucket: body.config?.bucket,
+      pathPrefix: body.config?.pathPrefix,
+      forcePathStyle: body.config?.forcePathStyle,
+      hasAccessKey: Boolean(body.config?.accessKeyId),
+      hasSecretKey: Boolean(body.config?.secretAccessKey),
+    }
+    console.error('[api/storage] upload failed', { status, message, config: safeConfig })
+    json(res, status, { ok: false, error: message })
   }
 }
