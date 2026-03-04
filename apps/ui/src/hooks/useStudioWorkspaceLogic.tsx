@@ -295,10 +295,6 @@ export function useStudioWorkspaceLogic({
     ],
     [t],
   )
-  const workflowStepOrder = useMemo<WorkflowStepKey[]>(
-    () => ['script', 'character', 'prop', 'storyboard', 'shot', 'production', 'export'],
-    [],
-  )
 
   const showCharacterPanel = activeStep === 'character'
   const showPropPanel = activeStep === 'prop'
@@ -365,49 +361,15 @@ export function useStudioWorkspaceLogic({
       seriesShots.length,
     ],
   )
-  const workflowStepLabelMap = useMemo(
-    () => new Map(workflowSteps.map((step) => [step.key, step.label])),
-    [workflowSteps],
-  )
-
   function canAccessStep(stepKey: WorkflowStepKey): boolean {
-    if (workflowStepCompleted[stepKey]) return true
-    const targetIdx = workflowStepOrder.indexOf(stepKey)
-    if (targetIdx <= 0) return true
-    for (let i = 0; i < targetIdx; i += 1) {
-      if (!workflowStepCompleted[workflowStepOrder[i]]) return false
-    }
+    void stepKey
     return true
   }
 
   function getStepBlockedReason(stepKey: WorkflowStepKey): string {
-    const targetIdx = workflowStepOrder.indexOf(stepKey)
-    if (targetIdx <= 0) return ''
-    for (let i = 0; i < targetIdx; i += 1) {
-      const prevStepKey = workflowStepOrder[i]
-      if (workflowStepCompleted[prevStepKey]) continue
-      return t('projectLibrary.stepLockedHint', {
-        step: workflowStepLabelMap.get(prevStepKey) ?? '',
-      })
-    }
+    void stepKey
     return ''
   }
-
-  useEffect(() => {
-    const activeStepIdx = workflowStepOrder.indexOf(activeStep)
-    if (activeStepIdx <= 0) return
-    if (workflowStepCompleted[activeStep]) return
-    const blocked = workflowStepOrder
-      .slice(0, activeStepIdx)
-      .some((stepKey) => !workflowStepCompleted[stepKey])
-    if (!blocked) return
-    const firstIncompleteIdx = workflowStepOrder.findIndex((stepKey) => !workflowStepCompleted[stepKey])
-    if (firstIncompleteIdx < 0) return
-    const fallbackStep = workflowStepOrder[firstIncompleteIdx]
-    if (fallbackStep !== activeStep) {
-      setActiveStep(fallbackStep)
-    }
-  }, [activeStep, workflowStepCompleted, workflowStepOrder])
 
   function clearTaskQueue() {
     const shouldClear = window.confirm(t('projectLibrary.taskQueueClearConfirm'))
