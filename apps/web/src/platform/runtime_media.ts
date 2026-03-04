@@ -1,10 +1,14 @@
 import type { ObjectStorageConfig } from '@openframe/shared/object-storage-config'
+import { createObjectStorageFactory } from '@openframe/shared/object-storage-factory'
 import {
   type ExportMergedVideoPayload,
   pickExportClips,
 } from './runtime_timeline'
 
 let mergedVideoPreviewUrl: string | null = null
+const VERCEL_FUNCTION_SAFE_PAYLOAD_BYTES = 4 * 1024 * 1024
+
+class StoragePayloadTooLargeError extends Error {}
 
 export function extToMimeType(ext: string, folder?: 'thumbnails' | 'videos'): string {
   const value = ext.replace(/^\./, '').toLowerCase()
@@ -56,7 +60,21 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-export async function uploadMediaToObjectStorage(args: {
+function estimateStorageApiPayloadBytes(dataSizeBytes: number): number {
+  const base64Bytes = Math.ceil((dataSizeBytes * 4) / 3)
+  const jsonOverhead = 16 * 1024
+  return base64Bytes + jsonOverhead
+}
+
+function isPayloadTooLargeResponse(status: number, bodyText: string): boolean {
+  if (status === 413) return true
+  const normalized = bodyText.toLowerCase()
+  return normalized.includes('request entity too large')
+    || normalized.includes('function_payload_too_large')
+    || normalized.includes('payload too large')
+}
+
+async function uploadMediaViaStorageApi(args: {
   data: Uint8Array
   ext: string
   folder?: 'thumbnails' | 'videos'
@@ -75,12 +93,83 @@ export async function uploadMediaToObjectStorage(args: {
     }),
   })
 
-  const payload = await response.json() as { ok: boolean; url?: string; error?: string }
-  if (!response.ok || !payload.ok || !payload.url) {
-    throw new Error(payload.error || `Storage upload failed (${response.status})`)
+  const rawText = await response.text()
+  const payload = (() => {
+    if (!rawText) return null
+    try {
+      return JSON.parse(rawText) as { ok?: boolean; url?: string; error?: string }
+    } catch {
+      return null
+    }
+  })()
+
+  if (isPayloadTooLargeResponse(response.status, rawText)) {
+    throw new StoragePayloadTooLargeError('Storage API payload too large')
+  }
+
+  if (!response.ok || payload?.ok !== true || !payload.url) {
+    throw new Error(payload?.error || rawText || `Storage upload failed (${response.status})`)
   }
 
   return payload.url
+}
+
+async function uploadMediaDirectlyToObjectStorage(args: {
+  data: Uint8Array
+  ext: string
+  folder?: 'thumbnails' | 'videos'
+  config: ObjectStorageConfig
+}): Promise<string> {
+  const storage = createObjectStorageFactory(args.config)
+  if (!storage.enabled) {
+    throw new Error('Object storage is not configured')
+  }
+  const url = await storage.saveMedia({
+    data: args.data,
+    ext: args.ext,
+    folder: args.folder,
+  })
+  if (!url) {
+    throw new Error('Object storage is not configured')
+  }
+  return url
+}
+
+export async function uploadMediaToObjectStorage(args: {
+  data: Uint8Array
+  ext: string
+  folder?: 'thumbnails' | 'videos'
+  config: ObjectStorageConfig
+}): Promise<string> {
+  const estimatedPayloadBytes = estimateStorageApiPayloadBytes(args.data.byteLength)
+  const shouldBypassStorageApi = estimatedPayloadBytes >= VERCEL_FUNCTION_SAFE_PAYLOAD_BYTES
+
+  if (shouldBypassStorageApi) {
+    try {
+      return await uploadMediaDirectlyToObjectStorage(args)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(
+        `Media payload exceeds Vercel Function limits. Direct object storage upload also failed: ${message}`,
+      )
+    }
+  }
+
+  try {
+    return await uploadMediaViaStorageApi(args)
+  } catch (err: unknown) {
+    if (!(err instanceof StoragePayloadTooLargeError)) {
+      throw err
+    }
+    try {
+      return await uploadMediaDirectlyToObjectStorage(args)
+    } catch (directErr: unknown) {
+      const directMessage = directErr instanceof Error ? directErr.message : String(directErr)
+      throw new Error(
+        `Vercel Function payload too large and direct object storage upload failed: ${directMessage}`,
+      )
+    }
+  }
 }
 
 export async function readMediaAsDataUrl(path: string): Promise<string | null> {
