@@ -3,6 +3,31 @@ import {
   parseObjectStorageConfig,
   type ObjectStorageConfig,
 } from '@openframe/shared/object-storage-config'
+import {
+  AUTH_CURRENT_USER_KEY,
+  AUTH_USERS_LIST_KEY,
+  localGet,
+  localSet,
+  localDelete,
+  readJSON,
+} from './runtime_state'
+
+export interface AuthUser {
+  id: string
+  username: string
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const msgUint8 = new TextEncoder().encode(password)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function generateId(): string {
+  return crypto.randomUUID()
+}
+
 import { ensureProxyFetchInstalled } from './fetch_proxy'
 import { createWebAiApi } from './runtime_ai'
 import {
@@ -400,6 +425,39 @@ export function ensureWebRuntimeAPIs(): void {
     openDirectory: async () => undefined,
     restart: async () => {
       window.location.reload()
+    },
+  }
+  runtimeWindow.authAPI = {
+    register: async (username: string, password: string): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> => {
+      const users = readJSON<Array<{ id: string; username: string; password_hash: string }>>(localGet(AUTH_USERS_LIST_KEY), [])
+      if (users.find(u => u.username === username)) {
+        return { ok: false, error: "Username already exists" }
+      }
+      const password_hash = await hashPassword(password)
+      const user = { id: generateId(), username }
+      users.push({ ...user, password_hash })
+      localSet(AUTH_USERS_LIST_KEY, JSON.stringify(users))
+      localSet(AUTH_CURRENT_USER_KEY, JSON.stringify(user))
+      return { ok: true, user }
+    },
+    login: async (username: string, password: string): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> => {
+      const users = readJSON<Array<{ id: string; username: string; password_hash: string }>>(localGet(AUTH_USERS_LIST_KEY), [])
+      const user = users.find(u => u.username === username)
+      if (!user) return { ok: false, error: "User not found" }
+      const hash = await hashPassword(password)
+      if (hash !== user.password_hash) return { ok: false, error: "Incorrect password" }
+      const currentUser = { id: user.id, username: user.username }
+      localSet(AUTH_CURRENT_USER_KEY, JSON.stringify(currentUser))
+      return { ok: true, user: currentUser }
+    },
+    logout: async (): Promise<void> => {
+      localDelete(AUTH_CURRENT_USER_KEY)
+    },
+    getCurrentUser: async (): Promise<AuthUser | null> => {
+      return readJSON<AuthUser | null>(localGet(AUTH_CURRENT_USER_KEY), null)
+    },
+    isLoggedIn: async (): Promise<boolean> => {
+      return localGet(AUTH_CURRENT_USER_KEY) !== null
     },
   }
 }

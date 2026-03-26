@@ -160,3 +160,10 @@ export const chunks = sqliteTable('chunks', {
   chunk_index: integer('chunk_index').notNull(),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
+
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  username: text('username').notNull().unique(),
+  password_hash: text('password_hash').notNull(),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull().\$defaultFn(() => new Date()),
+})

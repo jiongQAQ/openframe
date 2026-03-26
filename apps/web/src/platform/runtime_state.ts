@@ -10,6 +10,9 @@ export const SETTINGS_KEYS = [
   'prompt_overrides',
   'storage_config',
 ] as const
+export const AUTH_CURRENT_USER_KEY = 'openframe:web:current_user'
+export const AUTH_USERS_LIST_KEY = 'openframe:web:users_list'
+
 
 export type AllowedSettingKey = (typeof SETTINGS_KEYS)[number]
 

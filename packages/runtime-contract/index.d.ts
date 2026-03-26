@@ -395,4 +395,11 @@ interface Window {
     openDirectory: () => Promise<void>
     restart: () => Promise<void>
   }
+  authAPI: {
+    register: (username: string, password: string) => Promise<{ ok: true; user: { id: string; username: string } } | { ok: false; error: string }>
+    login: (username: string, password: string) => Promise<{ ok: true; user: { id: string; username: string } } | { ok: false; error: string }>
+    logout: () => Promise<void>
+    getCurrentUser: () => Promise<{ id: string; username: string } | null>
+    isLoggedIn: () => Promise<boolean>
+  }
 }
