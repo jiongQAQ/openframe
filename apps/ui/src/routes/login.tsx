@@ -8,7 +8,6 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const { t } = useTranslation()
-  const [isRegister, setIsRegister] = useState(false)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -19,9 +18,7 @@ function LoginPage() {
     setError("")
     setLoading(true)
     try {
-      const result = isRegister
-        ? await window.authAPI.register(username, password)
-        : await window.authAPI.login(username, password)
+      const result = await window.authAPI.login(username, password)
       if (result.ok) {
         window.location.hash = "#/projects"
         window.location.reload()
@@ -37,10 +34,10 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-96">
         <h1 className="text-2xl font-bold text-center mb-2 text-gray-800">
-          {isRegister ? t("auth.register") : t("auth.login")}
+          {t("auth.login")}
         </h1>
         <p className="text-center text-gray-500 mb-6 text-sm">
-          {isRegister ? t("auth.registerDesc") : t("auth.loginDesc")}
+          {t("auth.loginDesc")}
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -75,18 +72,9 @@ function LoginPage() {
             disabled={loading}
             className="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition"
           >
-            {loading ? t("common.loading") : (isRegister ? t("auth.registerBtn") : t("auth.loginBtn"))}
+            {loading ? t("common.loading") : t("auth.loginBtn")}
           </button>
         </form>
-        <div className="mt-4 text-center text-sm text-gray-500">
-          {isRegister ? t("auth.hasAccount") : t("auth.noAccount")}
-          <button
-            onClick={() => { setIsRegister(!isRegister); setError("") }}
-            className="text-indigo-600 hover:underline font-medium ml-1"
-          >
-            {isRegister ? t("auth.loginNow") : t("auth.registerNow")}
-          </button>
-        </div>
       </div>
     </div>
   )

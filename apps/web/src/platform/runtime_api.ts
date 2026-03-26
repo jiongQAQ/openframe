@@ -427,26 +427,19 @@ export function ensureWebRuntimeAPIs(): void {
       window.location.reload()
     },
   }
+  // Hardcoded single user: fanzhijiong / fanzhijiong@123
+  const ALLOWED_USER = { id: "fixed-user-001", username: "fanzhijiong", password_hash: "83fdc546b23e555fe8ab053e4e47e33f2128e1b5fbb5947116a08e6355c2e1e2" } // SHA-256 of "fanjhijiong@123"
+  const CORRECT_HASH = "83fdc546b23e555fe8ab053e4e47e33f2128e1b5fbb5947116a08e6355c2e1e2"
+
   runtimeWindow.authAPI = {
-    register: async (username: string, password: string): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> => {
-      const users = readJSON<Array<{ id: string; username: string; password_hash: string }>>(localGet(AUTH_USERS_LIST_KEY), [])
-      if (users.find(u => u.username === username)) {
-        return { ok: false, error: "Username already exists" }
-      }
-      const password_hash = await hashPassword(password)
-      const user = { id: generateId(), username }
-      users.push({ ...user, password_hash })
-      localSet(AUTH_USERS_LIST_KEY, JSON.stringify(users))
-      localSet(AUTH_CURRENT_USER_KEY, JSON.stringify(user))
-      return { ok: true, user }
+    register: async (_username: string, _password: string): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> => {
+      return { ok: false, error: "Registration is disabled" }
     },
     login: async (username: string, password: string): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> => {
-      const users = readJSON<Array<{ id: string; username: string; password_hash: string }>>(localGet(AUTH_USERS_LIST_KEY), [])
-      const user = users.find(u => u.username === username)
-      if (!user) return { ok: false, error: "User not found" }
+      if (username !== "fanzhijiong") return { ok: false, error: "User not found" }
       const hash = await hashPassword(password)
-      if (hash !== user.password_hash) return { ok: false, error: "Incorrect password" }
-      const currentUser = { id: user.id, username: user.username }
+      if (hash !== CORRECT_HASH) return { ok: false, error: "Incorrect password" }
+      const currentUser = { id: ALLOWED_USER.id, username: ALLOWED_USER.username }
       localSet(AUTH_CURRENT_USER_KEY, JSON.stringify(currentUser))
       return { ok: true, user: currentUser }
     },
